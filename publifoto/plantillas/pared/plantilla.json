@@ -1,0 +1,49 @@
+{
+  "id": "pared",
+  "nombre": "CALENDARIOS PARED",
+  "tipo": "raster",
+  "color": "CMYK",
+  "lienzo": [
+    3661,
+    5079
+  ],
+  "ppp": 300,
+  "fondo_color": [
+    255,
+    255,
+    255
+  ],
+  "huecos": [
+    {
+      "rect": [
+        0,
+        0,
+        3661,
+        5079
+      ]
+    }
+  ],
+  "jugadores_por_hoja": 1,
+  "encuadre": {
+    "margen": 0.083,
+    "alto_rel": 4.165,
+    "centro": 0.014,
+    "referencia": "mixto"
+  },
+  "encima": [
+    {
+      "nombre": "CF AMPOSTA NOU",
+      "archivo": "logo.tif",
+      "x": 2946,
+      "y": 4164
+    }
+  ],
+  "impresion": [
+    "tif"
+  ],
+  "editable": "psd",
+  "archivo": "CALENDARIO PARED {EQUIPO} - {FOTO}",
+  "excluir": [
+    "equipo"
+  ]
+}

@@ -1,0 +1,10 @@
+numpy==2.5.3
+opencv-python==5.0.0
+Pillow==12.3.0
+PyMuPDF==1.28.2
+psd-tools==1.26.0
+PySide6==6.12.0
+rembg==2.0.85
+onnxruntime==1.30.0
+tifffile==2026.9.20
+mediapipe==0.10.14

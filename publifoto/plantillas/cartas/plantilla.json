@@ -1,0 +1,59 @@
+{
+  "id": "cartas",
+  "nombre": "CARTAS",
+  "tipo": "carta",
+  "color": "CMYK",
+  "lienzo": [
+    3780,
+    5315
+  ],
+  "ppp": 300,
+  "fondo": "fondo.png",
+  "debajo": "debajo.png",
+  "mascara": "mascara.png",
+  "encima": "encima.png",
+  "lut": "lut.npy",
+  "sombra": "sombra.npy",
+  "capas_encima": [
+    "<Path>",
+    "separados",
+    "logo",
+    "TEXT CLUB",
+    "99 PAS",
+    "98 TIR",
+    "99 RIT",
+    "96 FIS",
+    "99 DEF ",
+    "97 REG     ",
+    "FUT",
+    "Temp. 25/26",
+    "98"
+  ],
+  "huecos": [
+    {
+      "rect": [
+        0,
+        0,
+        3780,
+        5315
+      ]
+    }
+  ],
+  "jugadores_por_hoja": 1,
+  "encuadre": {
+    "margen": 0.1475,
+    "alto_rel": 5.69,
+    "centro": 0.0,
+    "referencia": "mixto"
+  },
+  "impresion": [
+    "tif"
+  ],
+  "editable": "psd",
+  "archivo": "CARTA {FOTO}",
+  "excluir": [
+    "entrenador",
+    "equipo"
+  ],
+  "necesita_recorte": true
+}

@@ -1,0 +1,19 @@
+# Fotos de prueba (menores): no salen nunca de este PC
+PRUEBA/
+PRUEBA_GIRO/
+*.jpg
+*.jpeg
+*.JPG
+*.JPEG
+*.CR2
+*.cr2
+*.NEF
+*.publifoto
+# Modelo de silueta (176 MB, más que el límite de GitHub): el montaje lo baja solo
+publifoto/recursos/modelos/*.onnx
+# Montajes y entornos
+build/
+dist/
+.venv*/
+__pycache__/
+*.pyc

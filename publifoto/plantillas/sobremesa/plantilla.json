@@ -1,0 +1,127 @@
+{
+  "id": "sobremesa",
+  "nombre": "CALENDARIOS SOBREMESA",
+  "tipo": "pdf",
+  "color": "CMYK",
+  "fondo": "fondo.pdf",
+  "calendarios": [
+    {
+      "zona": [
+        0.0,
+        0,
+        637.79,
+        907.09
+      ],
+      "huecos": [
+        {
+          "rect": [
+            56.03,
+            478.7,
+            264.08,
+            737.33
+          ],
+          "espejo_vertical": false,
+          "nombre": "BAIX"
+        },
+        {
+          "rect": [
+            379.05,
+            170.71,
+            587.09,
+            429.34
+          ],
+          "espejo_vertical": true,
+          "nombre": "DALT"
+        }
+      ]
+    },
+    {
+      "zona": [
+        637.79,
+        0,
+        1275.59,
+        907.09
+      ],
+      "huecos": [
+        {
+          "rect": [
+            690.43,
+            478.7,
+            898.47,
+            737.33
+          ],
+          "espejo_vertical": false,
+          "nombre": "BAIX"
+        },
+        {
+          "rect": [
+            1013.44,
+            170.71,
+            1221.49,
+            429.34
+          ],
+          "espejo_vertical": true,
+          "nombre": "DALT"
+        }
+      ]
+    }
+  ],
+  "marcos": [
+    {
+      "rect": [
+        56.03,
+        478.7,
+        264.08,
+        737.33
+      ],
+      "grosor": 2.187000036239624
+    },
+    {
+      "rect": [
+        379.05,
+        170.71,
+        587.09,
+        429.34
+      ],
+      "grosor": 2.187000036239624
+    },
+    {
+      "rect": [
+        690.43,
+        478.7,
+        898.47,
+        737.33
+      ],
+      "grosor": 2.187000036239624
+    },
+    {
+      "rect": [
+        1013.44,
+        170.71,
+        1221.49,
+        429.34
+      ],
+      "grosor": 2.187000036239624
+    }
+  ],
+  "ppp_fotos": 300,
+  "fondos_parciales": {
+    "1": "fondo_izquierda.pdf"
+  },
+  "encuadre": {
+    "margen": 0.1,
+    "alto_rel": 3.73,
+    "centro": 0.0,
+    "referencia": "mixto"
+  },
+  "impresion": [
+    "pdf"
+  ],
+  "editable": "pdf",
+  "archivo": "CALENDARI SOBRETAULA 2027 - {EQUIPO}",
+  "excluir": [
+    "entrenador",
+    "equipo"
+  ],
+  "guardar_recortes": true
+}

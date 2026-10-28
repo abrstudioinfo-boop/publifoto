@@ -1,0 +1,37 @@
+PUBLIFOTO PARA MAC - CÓMO MONTARLO Y ENTREGARLO
+================================================
+
+Lo monta una vez alguien con un Mac (mejor con chip Apple M1 o posterior).
+Al cliente solo se le entrega el archivo Publifoto.dmg que sale al final.
+
+1. Instalar Python 3.12 (solo en el Mac donde se monta, el cliente no lo necesita):
+   https://www.python.org/downloads/macos/  ->  "macOS 64-bit universal2 installer" de la 3.12
+
+2. Descomprimir esta carpeta, por ejemplo en el Escritorio.
+
+3. Abrir la app "Terminal", escribir  bash  y un espacio, arrastrar a la ventana el
+   archivo empaquetar/construir_mac.sh y pulsar Intro.
+   Tarda unos 10-20 minutos la primera vez (baja las librerías). Al final pone:
+       TODO BIEN
+       Listo: dist/Publifoto.dmg
+
+4. Probar que sale igual que en el PC (recomendado antes de entregar):
+   dist/Publifoto.app/Contents/MacOS/Publifoto --prueba "<carpeta de fotos de un equipo>" "<carpeta de salida>" "S11 C"
+   y comparar los archivos con los que da el PC con las mismas fotos. En Windows el
+   programa montado y el normal dan exactamente lo mismo (diferencia 0).
+
+5. Entregar Publifoto.dmg. El cliente lo abre y arrastra Publifoto a Aplicaciones.
+
+SIN FIRMA DE APPLE (demo): la primera vez el Mac dice que no puede comprobar el
+desarrollador. Se abre con clic derecho sobre Publifoto > Abrir > Abrir (solo la
+primera vez). Si macOS 15 no deja: Ajustes del Sistema > Privacidad y seguridad >
+"Abrir igualmente".
+
+CON FIRMA (para la versión de venta): hace falta una cuenta Apple Developer (99 €/año)
+y un certificado "Developer ID Application". Después:
+   xcrun notarytool store-credentials publifoto      (una vez)
+   FIRMA="Developer ID Application: Nombre (EQUIPO)" PERFIL_NOTARIO=publifoto bash empaquetar/construir_mac.sh
+Así el Mac lo abre sin avisos.
+
+El programa no se conecta a internet: todo (modelos, letras, plantillas, perfil de
+color) va dentro. Las fotos se quedan en el ordenador del cliente.

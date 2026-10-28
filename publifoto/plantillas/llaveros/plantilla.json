@@ -1,0 +1,125 @@
+{
+  "id": "llaveros",
+  "nombre": "LLAVEROS",
+  "tipo": "raster",
+  "color": "RGB",
+  "lienzo": [
+    2362,
+    1795
+  ],
+  "ppp": 300,
+  "fondo_color": [
+    194,
+    194,
+    194
+  ],
+  "huecos": [
+    {
+      "rect": [
+        27,
+        50,
+        488,
+        700
+      ],
+      "jugador": 0
+    },
+    {
+      "rect": [
+        488,
+        50,
+        948,
+        700
+      ],
+      "jugador": 1
+    },
+    {
+      "rect": [
+        948,
+        50,
+        1409,
+        700
+      ],
+      "jugador": 2
+    },
+    {
+      "rect": [
+        1409,
+        50,
+        1869,
+        700
+      ],
+      "jugador": 3
+    },
+    {
+      "rect": [
+        1869,
+        50,
+        2330,
+        700
+      ],
+      "jugador": 4
+    },
+    {
+      "rect": [
+        27,
+        1110,
+        488,
+        1760
+      ],
+      "jugador": 0
+    },
+    {
+      "rect": [
+        488,
+        1110,
+        948,
+        1760
+      ],
+      "jugador": 1
+    },
+    {
+      "rect": [
+        948,
+        1110,
+        1409,
+        1760
+      ],
+      "jugador": 2
+    },
+    {
+      "rect": [
+        1409,
+        1110,
+        1869,
+        1760
+      ],
+      "jugador": 3
+    },
+    {
+      "rect": [
+        1869,
+        1110,
+        2330,
+        1760
+      ],
+      "jugador": 4
+    }
+  ],
+  "jugadores_por_hoja": 5,
+  "encuadre": {
+    "margen": 0.0855,
+    "alto_rel": 2.22,
+    "centro": -0.004,
+    "referencia": "cara"
+  },
+  "encima": [],
+  "impresion": [
+    "jpg"
+  ],
+  "editable": "psd",
+  "archivo": "LLAVEROS {EQUIPO} {N}",
+  "excluir": [
+    "entrenador",
+    "equipo"
+  ]
+}

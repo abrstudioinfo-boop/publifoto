@@ -1,0 +1,50 @@
+{
+  "id": "15x20",
+  "nombre": "15 X 20 CON LOGO",
+  "tipo": "raster",
+  "color": "RGB",
+  "lienzo": [
+    1772,
+    2362
+  ],
+  "ppp": 300,
+  "fondo_color": [
+    255,
+    255,
+    255
+  ],
+  "huecos": [
+    {
+      "rect": [
+        0,
+        0,
+        1772,
+        2362
+      ]
+    }
+  ],
+  "jugadores_por_hoja": 1,
+  "encuadre": {
+    "margen": 0.083,
+    "alto_rel": 4.03,
+    "centro": 0.016,
+    "referencia": "mixto"
+  },
+  "encima": [
+    {
+      "nombre": "CF AMPOSTA NOU",
+      "archivo": "logo.png",
+      "x": 1389,
+      "y": 1948
+    }
+  ],
+  "impresion": [
+    "jpg"
+  ],
+  "editable": "psd",
+  "archivo": "{FOTO}",
+  "excluir": [
+    "entrenador",
+    "equipo"
+  ]
+}
