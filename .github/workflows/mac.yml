@@ -1,6 +1,6 @@
-# Monta Publifoto.dmg en un Mac de GitHub (Apple M1 o posterior).
+# Monta Publifoto.dmg en Macs de GitHub: uno con chip Apple (M1 o posterior) y otro Intel.
 # Se lanza solo al subir cambios, o a mano en Actions > "Montar para Mac" > Run workflow.
-# El .dmg queda para descargar en la página del montaje, en "Artifacts".
+# Los .dmg quedan para descargar en la página del montaje, en "Artifacts".
 name: Montar para Mac
 
 on:
@@ -10,7 +10,15 @@ on:
 
 jobs:
   mac:
-    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            nombre: Publifoto-Mac-chip-Apple
+          - runner: macos-15-intel
+            nombre: Publifoto-Mac-Intel
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +31,6 @@ jobs:
         run: bash empaquetar/construir_mac.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: Publifoto-Mac
+          name: ${{ matrix.nombre }}
           path: dist/Publifoto.dmg
           retention-days: 30
