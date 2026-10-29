@@ -21,11 +21,31 @@ _malla = None
 _caras = None
 
 
+def _importar_mediapipe():
+    # MediaPipe importa matplotlib solo para sus funciones de dibujo, que aquí no se
+    # usan. Si matplotlib está roto o le falta algo (p. ej. dateutil), se sustituye por
+    # un módulo vacío para que no tumbe la carga de las fotos.
+    # Se prueba antes de cargar MediaPipe: su parte nativa no se puede cargar dos veces.
+    import sys
+    import types
+    try:
+        import matplotlib.pyplot  # noqa: F401
+    except Exception:
+        for nombre in [n for n in sys.modules if n.startswith("matplotlib")]:
+            del sys.modules[nombre]
+        falso = types.ModuleType("matplotlib")
+        falso.pyplot = types.ModuleType("matplotlib.pyplot")
+        sys.modules["matplotlib"] = falso
+        sys.modules["matplotlib.pyplot"] = falso.pyplot
+    import mediapipe as mp
+    return mp
+
+
 def _modelos():
     global _pose, _malla, _caras
     if _pose is None:
-        import mediapipe as mp
-        _pose = mp.solutions.pose.Pose(static_image_mode=True, model_complexity=2,
+        mp = _importar_mediapipe()
+        _pose =mp.solutions.pose.Pose(static_image_mode=True, model_complexity=2,
                                        min_detection_confidence=0.3)
         _malla = mp.solutions.face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1,
                                                  refine_landmarks=True,

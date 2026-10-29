@@ -1,6 +1,6 @@
 # Monta Publifoto en ordenadores de GitHub: .dmg para Mac con chip Apple (M1 o posterior)
 # y para Mac Intel, y la carpeta con Publifoto.exe para Windows.
-# Se lanza solo al subir cambios, o a mano en Actions > "Montar para Mac" > Run workflow.
+# Se lanza solo al subir cambios, o a mano en Actions > "Montar Publifoto" > Run workflow.
 # Los montajes quedan para descargar en la página del montaje, en "Artifacts".
 name: Montar Publifoto
 
