@@ -37,6 +37,10 @@ pyinstaller --noconfirm --clean --distpath dist --workpath build empaquetar/publ
 
 echo "== 4/5 Prueba del programa montado"
 dist/Publifoto.app/Contents/MacOS/Publifoto --comprobar
+# todos los productos con fotos de mentira dibujadas por el programa (ninguna foto real)
+PRUEBA_DIR="$(mktemp -d)"
+dist/Publifoto.app/Contents/MacOS/Publifoto --prueba-completa "$PRUEBA_DIR"
+rm -rf "$PRUEBA_DIR"
 
 echo "== 5/5 Firma y .dmg"
 if [ -n "${FIRMA:-}" ]; then

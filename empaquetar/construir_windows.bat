@@ -18,4 +18,12 @@ rem el .exe no tiene consola: el informe de la prueba queda en comprobar.txt
 dist\Publifoto\Publifoto.exe --comprobar
 set RESULTADO=%ERRORLEVEL%
 type "%LOCALAPPDATA%\Publifoto\cache\comprobar.txt"
+if not %RESULTADO%==0 exit /b %RESULTADO%
+rem todos los productos con fotos de mentira dibujadas por el programa (ninguna foto real)
+set PRUEBA_DIR=%TEMP%\publifoto_prueba
+if exist "%PRUEBA_DIR%" rmdir /s /q "%PRUEBA_DIR%"
+dist\Publifoto\Publifoto.exe --prueba-completa "%PRUEBA_DIR%"
+set RESULTADO=%ERRORLEVEL%
+type "%LOCALAPPDATA%\Publifoto\cache\comprobar.txt"
+rmdir /s /q "%PRUEBA_DIR%"
 exit /b %RESULTADO%
