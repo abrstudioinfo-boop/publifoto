@@ -1,4 +1,5 @@
-numpy==2.5.3
+numpy==2.5.3; platform_system != "Darwin" or platform_machine != "x86_64"
+numpy==2.3.5; platform_system == "Darwin" and platform_machine == "x86_64"
 opencv-contrib-python==5.0.0.93
 opencv-python-headless==5.0.0.93
 Pillow==12.3.0
@@ -7,7 +8,10 @@ psd-tools==1.26.0
 PySide6==6.12.0
 rembg==2.0.85
 onnxruntime==1.30.0; platform_system != "Darwin" or platform_machine != "x86_64"
-# Mac Intel: onnxruntime ya no saca versiones nuevas para Intel, la última es 1.23.2
+# Mac Intel: onnxruntime y numba (recorte de rembg) ya no sacan versiones para Intel;
+# se usan las últimas que hay, y numba 0.62 pide numpy < 2.4
 onnxruntime==1.23.2; platform_system == "Darwin" and platform_machine == "x86_64"
 tifffile==2026.9.20
 mediapipe==0.10.14
+numba==0.62.1; platform_system == "Darwin" and platform_machine == "x86_64"
+llvmlite==0.45.1; platform_system == "Darwin" and platform_machine == "x86_64"
