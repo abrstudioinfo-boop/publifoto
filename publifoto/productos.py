@@ -381,6 +381,17 @@ def guardar_pdf(doc, ruta_sin_ext):
     return ruta_sin_ext + ".pdf"
 
 
+def pdf_a_tif(doc, ruta_sin_ext, ppp=300):
+    """Cada página en TIFF CMYK (FOGRA39), para imprimir sin pasar por el PDF."""
+    salidas = []
+    for i, pg in enumerate(doc):
+        pix = pg.get_pixmap(dpi=ppp, colorspace=fitz.csCMYK)
+        im = Image.frombytes("CMYK", (pix.width, pix.height), pix.samples)
+        sufijo = "" if len(doc) == 1 else f" {i + 1}"
+        salidas.append(guardar_raster(im, ruta_sin_ext + sufijo, "tif", ppp))
+    return salidas
+
+
 def pdf_a_jpg(doc, ruta_sin_ext, ppp=300):
     salidas = []
     for i, pg in enumerate(doc):

@@ -186,6 +186,8 @@ def generar(trabajo, progreso=print):
                 salidas.append(productos.guardar_pdf(doc, os.path.join(imp, nombre)))
             if "jpg" in p["impresion"]:
                 salidas += productos.pdf_a_jpg(doc, os.path.join(imp, nombre))
+            if "tif" in p["impresion"]:
+                salidas += productos.pdf_a_tif(doc, os.path.join(imp, nombre))
             recortes = os.path.join(edi, "FOTOS") if p.get("guardar_recortes") else None
             salidas.append(productos.guardar_pdf(productos.pdf(p, hs, trabajo.equipo, aj, capas=True, marca=trabajo.marca,
                                                                carpeta_recortes=recortes),

@@ -82,6 +82,43 @@ def _icc_fogra39(d):
             d.xref_set_key(x, "ColorSpace", f"[/ICCBased {icc} 0 R]")
 
 
+def _cmyk_de(r, g, b):
+    """Color RGB (0..1) en CMYK FOGRA39 (0..1). El negro puro va solo con negro (K) y el
+    blanco sin tinta: así la línea de corte y los textos no salen con cuatro tintas."""
+    from ..color import a_cmyk
+    if max(r, g, b) < 0.002:
+        return (0, 0, 0, 1)
+    if min(r, g, b) > 0.998:
+        return (0, 0, 0, 0)
+    px = a_cmyk(Image.new("RGB", (1, 1), tuple(round(v * 255) for v in (r, g, b)))).getpixel((0, 0))
+    return tuple(round(v / 255, 4) for v in px)
+
+
+def _vectores_a_cmyk(d):
+    """Pasa a CMYK los colores RGB del diseño vectorial (rellenos, trazos) de la página:
+    «/CS0 cs r g b scn» y «r g b rg» pasan a «c m y k k». Solo si todos los espacios de
+    color de la página son RGB; si no, no se toca nada."""
+    pg = d[0]
+    recursos = d.xref_get_key(pg.xref, "Resources/ColorSpace")
+    nombres = re.findall(r"/(\w+) (\d+) 0 R", recursos[1]) if recursos[0] == "dict" else []
+    for _, x in nombres:
+        icc = d.xref_object(int(x), compressed=True)
+        n = re.search(r"/N (\d)", d.xref_object(int(re.search(r"(\d+) 0 R", icc).group(1)), compressed=True)) \
+            if "ICCBased" in icc else None
+        if "DeviceRGB" not in icc and not (n and n.group(1) == "3"):
+            raise ValueError("La plantilla tiene colores que no son RGB: no se convierten.")
+    num = r"(-?\d*\.?\d+)"
+    patron = re.compile(rf"(?:/\w+\s+(cs|CS)\s+)?{num}\s+{num}\s+{num}\s+(scn|SCN|sc|SC|rg|RG)(?=[\s/\[]|$)")
+
+    def cambio(m):
+        c = _cmyk_de(*(float(v) for v in m.group(2, 3, 4)))
+        op = "K" if m.group(5).isupper() else "k"
+        return " ".join(f"{v:g}" for v in c) + " " + op
+    for x in pg.get_contents():
+        contenido = d.xref_stream(x).decode("latin1")
+        d.update_stream(x, patron.sub(cambio, contenido).encode("latin1"))
+
+
 def _bloques(contenido):
     """Divide un flujo de contenido en bloques de primer nivel q ... Q y BT ... ET."""
     bloques, nivel, texto, actual = [], 0, False, []
@@ -190,7 +227,7 @@ def _club_y_temporada(quitados):
             # 0.85 de la cuerda del círculo en la franja: nombres largos se reducen
             textos.append({"texto": clave, "giro": 90, "base_x": round(s["origin"][0], 2),
                            "centro_y": round((y0 + y1) / 2, 2), "tam": s["size"],
-                           "fuente": "SourceSans3-Bold.ttf", "color": [1, 1, 1],
+                           "fuente": "SourceSans3-Bold.ttf", "color": [0, 0, 0, 0],
                            "largo_max": 150 if clave == "{CLUB}" else 60})
     return textos
 
@@ -229,18 +266,20 @@ def imanes(origen, carpeta=None):
                        "circulo": list(c)})
     if not huecos:
         raise ValueError("No se encuentran los círculos de los imanes en la plantilla.")
+    # los imanes se imprimen en CMYK (FOGRA39): también el diseño (franja y línea de corte)
+    _vectores_a_cmyk(d)
     os.makedirs(carpeta, exist_ok=True)
     d.save(os.path.join(carpeta, "fondo.pdf"), garbage=4, deflate=True)
     # el nombre del equipo va centrado donde estaba el de ejemplo
     x0, y0, x1, y1 = texto["bbox"]
     _guardar(carpeta, {
-        "id": id_, "nombre": "IMANES", "tipo": "pdf", "color": "RGB", "fondo": "fondo.pdf",
+        "id": id_, "nombre": "IMANES", "tipo": "pdf", "color": "CMYK", "fondo": "fondo.pdf",
         "huecos": huecos, "jugadores_por_hoja": len(huecos), "ppp_fotos": 400,
         "encuadre": {"margen": 0.216, "alto_rel": 5.36, "centro": -0.033, "referencia": "mixto"},
         "textos": [{"texto": "{EQUIPO}", "centro_x": round((x0 + x1) / 2, 2) + 3.7, "base_y": round(texto["origin"][1], 2),
-                    "tam": texto["size"], "fuente": "SourceSans3-Regular.ttf", "color": [0, 0, 0]}]
+                    "tam": texto["size"], "fuente": "SourceSans3-Regular.ttf", "color": [0, 0, 0, 1]}]
                   + _club_y_temporada(quitados),
-        "impresion": ["pdf", "jpg"], "editable": "pdf", "archivo": "IMANES {EQUIPO}",
+        "impresion": ["pdf", "tif"], "editable": "pdf", "archivo": "IMANES {EQUIPO}",
         "excluir": ["entrenador", "equipo"],
     })
 
