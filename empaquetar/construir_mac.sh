@@ -47,7 +47,13 @@ if [ -n "${FIRMA:-}" ]; then
     codesign --deep --force --timestamp --options runtime --sign "$FIRMA" dist/Publifoto.app
     codesign --verify --deep --strict dist/Publifoto.app
 fi
-hdiutil create -volname Publifoto -srcfolder dist/Publifoto.app -ov -format UDZO dist/Publifoto.dmg
+# hdiutil a veces falla con "Resource busy" justo después de montar (el Mac aún está
+# revisando los archivos nuevos): se reintenta
+for intento in 1 2 3 4 5; do
+    hdiutil create -volname Publifoto -srcfolder dist/Publifoto.app -ov -format UDZO dist/Publifoto.dmg && break
+    [ "$intento" = 5 ] && exit 1
+    echo "hdiutil ocupado, se reintenta en 15 s ($intento/5)"; sleep 15
+done
 if [ -n "${FIRMA:-}" ] && [ -n "${PERFIL_NOTARIO:-}" ]; then
     codesign --force --timestamp --sign "$FIRMA" dist/Publifoto.dmg
     xcrun notarytool submit dist/Publifoto.dmg --keychain-profile "$PERFIL_NOTARIO" --wait
