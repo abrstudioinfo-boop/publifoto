@@ -10,6 +10,9 @@ calendarios de pared y de sobremesa, 15×20 con logo) **sin Adobe**.
 3. Para CARTAS, arrastra también la carpeta RECORTADAS (PNG sin fondo, con el
    mismo nombre de archivo que la foto arreglada).
 4. Revisa la clasificación (jugador / entrenador / foto de equipo) y marca los productos.
+   Elige el **escudo del club** (la primera vez, «Añadir logos…» con la carpeta de escudos:
+   el nombre de cada archivo es el del club). Sale en 15 x 20, calendario de pared y
+   calendario de sobremesa (marca de agua); en los imanes va el nombre del club y la temporada.
 5. Opcional: **Revisión rápida de encuadres** (flechas, rueda del ratón o + / −).
    Si un jugador sale torcido, **↺ / ↻** (o las teclas `[` y `]`) lo giran en pasos de 0,5°.
    El giro vale para todos los productos y el encuadre se recalcula para que tenga las
@@ -34,6 +37,15 @@ Resultado:
 | CALENDARIOS PARED | TIFF CMYK, uno por persona | un PSD con una capa por persona | jugadores y entrenadores |
 | CALENDARIOS SOBREMESA | PDF CMYK FOGRA39, 2 por hoja; foto = marco rojo exacto; si son impares, media hoja en blanco | PDF por capas + FOTOS/ (recortes y _DALT) | jugadores |
 | 15 X 20 CON LOGO | JPG RGB, uno por jugador | PSD por foto | jugadores |
+
+## Plantillas de cada año
+
+«Plantillas…» → «Actualizar…» y se elige el archivo original nuevo (calendario de sobremesa:
+el PDF exportado de InDesign; imanes: el .ai; pared y 15 x 20: el TIFF con capas). El programa
+lo convierte, lo prueba generando el producto con figuras dibujadas y solo entonces lo usa.
+Se guarda en la carpeta de datos del usuario (`%LOCALAPPDATA%\Publifoto\datos` en Windows,
+`~/Library/Application Support/Publifoto` en Mac), igual que los escudos; «Volver a la
+original» recupera la que viene con el programa. Cartas aún no se actualiza desde aquí.
 
 ## Revisores automáticos
 
@@ -91,8 +103,8 @@ modelos de silueta, cara y cuerpo), sin Python ni descargas en el ordenador del 
   <salida> [equipo]` genera un equipo sin ventana para comparar ordenadores.
   En Windows el programa montado da exactamente lo mismo que el normal.
 
-La letra del nombre del equipo en imanes es Source Sans 3 (libre, OFL, en
-`recursos/fuentes`): la original es Myriad Pro, de Adobe, y no se puede repartir.
+Las letras de los imanes (nombre del equipo, del club y temporada) son Source Sans 3 (libre,
+OFL, en `recursos/fuentes`): la original es Myriad Pro, de Adobe, y no se puede repartir.
 
 ## Pendiente
 

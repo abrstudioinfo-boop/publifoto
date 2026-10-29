@@ -194,6 +194,342 @@
         0,
         0
       ]
+    },
+    {
+      "texto": "{CLUB}",
+      "giro": 90,
+      "base_x": 97.96,
+      "centro_y": 199.03,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 150
+    },
+    {
+      "texto": "{CLUB}",
+      "giro": 90,
+      "base_x": 380.94,
+      "centro_y": 199.03,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 150
+    },
+    {
+      "texto": "{CLUB}",
+      "giro": 90,
+      "base_x": 663.92,
+      "centro_y": 199.03,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 150
+    },
+    {
+      "texto": "{CLUB}",
+      "giro": 90,
+      "base_x": 97.96,
+      "centro_y": 491.54,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 150
+    },
+    {
+      "texto": "{CLUB}",
+      "giro": 90,
+      "base_x": 380.94,
+      "centro_y": 491.54,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 150
+    },
+    {
+      "texto": "{CLUB}",
+      "giro": 90,
+      "base_x": 663.92,
+      "centro_y": 491.54,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 150
+    },
+    {
+      "texto": "{CLUB}",
+      "giro": 90,
+      "base_x": 97.96,
+      "centro_y": 784.04,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 150
+    },
+    {
+      "texto": "{CLUB}",
+      "giro": 90,
+      "base_x": 380.94,
+      "centro_y": 784.04,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 150
+    },
+    {
+      "texto": "{CLUB}",
+      "giro": 90,
+      "base_x": 663.92,
+      "centro_y": 784.04,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 150
+    },
+    {
+      "texto": "{CLUB}",
+      "giro": 90,
+      "base_x": 97.96,
+      "centro_y": 1076.54,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 150
+    },
+    {
+      "texto": "{CLUB}",
+      "giro": 90,
+      "base_x": 380.94,
+      "centro_y": 1076.54,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 150
+    },
+    {
+      "texto": "{CLUB}",
+      "giro": 90,
+      "base_x": 663.92,
+      "centro_y": 1076.54,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 150
+    },
+    {
+      "texto": "{TEMPORADA}",
+      "giro": 90,
+      "base_x": 81.16,
+      "centro_y": 199.04,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 60
+    },
+    {
+      "texto": "{TEMPORADA}",
+      "giro": 90,
+      "base_x": 364.14,
+      "centro_y": 199.04,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 60
+    },
+    {
+      "texto": "{TEMPORADA}",
+      "giro": 90,
+      "base_x": 647.12,
+      "centro_y": 199.04,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 60
+    },
+    {
+      "texto": "{TEMPORADA}",
+      "giro": 90,
+      "base_x": 81.16,
+      "centro_y": 491.54,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 60
+    },
+    {
+      "texto": "{TEMPORADA}",
+      "giro": 90,
+      "base_x": 364.14,
+      "centro_y": 491.54,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 60
+    },
+    {
+      "texto": "{TEMPORADA}",
+      "giro": 90,
+      "base_x": 647.12,
+      "centro_y": 491.54,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 60
+    },
+    {
+      "texto": "{TEMPORADA}",
+      "giro": 90,
+      "base_x": 81.16,
+      "centro_y": 784.05,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 60
+    },
+    {
+      "texto": "{TEMPORADA}",
+      "giro": 90,
+      "base_x": 364.14,
+      "centro_y": 784.05,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 60
+    },
+    {
+      "texto": "{TEMPORADA}",
+      "giro": 90,
+      "base_x": 647.12,
+      "centro_y": 784.05,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 60
+    },
+    {
+      "texto": "{TEMPORADA}",
+      "giro": 90,
+      "base_x": 81.16,
+      "centro_y": 1076.55,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 60
+    },
+    {
+      "texto": "{TEMPORADA}",
+      "giro": 90,
+      "base_x": 364.14,
+      "centro_y": 1076.55,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 60
+    },
+    {
+      "texto": "{TEMPORADA}",
+      "giro": 90,
+      "base_x": 647.12,
+      "centro_y": 1076.55,
+      "tam": 14.0,
+      "fuente": "SourceSans3-Bold.ttf",
+      "color": [
+        1,
+        1,
+        1
+      ],
+      "largo_max": 60
     }
   ],
   "impresion": [

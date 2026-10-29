@@ -51,6 +51,14 @@ class Trabajo:
     jugadores: list = field(default_factory=list)
     ajustes: dict = field(default_factory=dict)   # {producto: {foto: {dx, dy, zoom}}}
     avisos: list = field(default_factory=list)    # de los revisores automáticos
+    escudo: str = None        # logo del club (club.py); None = el de la plantilla
+    club: str = None          # nombre del club en los imanes; None = el de la plantilla
+    temporada: str = None     # «26/27»; None = la temporada actual
+
+    @property
+    def marca(self):
+        return {"escudo": self.escudo if self.escudo and os.path.exists(self.escudo) else None,
+                "club": self.club, "temporada": self.temporada}
 
     @property
     def carpeta_equipo(self):
@@ -173,13 +181,13 @@ def generar(trabajo, progreso=print):
         elif p["tipo"] == "pdf":
             hs = productos.hojas(p, jug)
             nombre = productos.nombre_archivo(p, trabajo.equipo)
-            doc = productos.pdf(p, hs, trabajo.equipo, aj)
+            doc = productos.pdf(p, hs, trabajo.equipo, aj, marca=trabajo.marca)
             if "pdf" in p["impresion"]:
                 salidas.append(productos.guardar_pdf(doc, os.path.join(imp, nombre)))
             if "jpg" in p["impresion"]:
                 salidas += productos.pdf_a_jpg(doc, os.path.join(imp, nombre))
             recortes = os.path.join(edi, "FOTOS") if p.get("guardar_recortes") else None
-            salidas.append(productos.guardar_pdf(productos.pdf(p, hs, trabajo.equipo, aj, capas=True,
+            salidas.append(productos.guardar_pdf(productos.pdf(p, hs, trabajo.equipo, aj, capas=True, marca=trabajo.marca,
                                                                carpeta_recortes=recortes),
                                                  os.path.join(edi, nombre)))
         else:
@@ -199,7 +207,7 @@ def _generar_raster(p, jug, trabajo, aj, imp, edi, progreso):
         todas_capas = []
         for j in jug:
             progreso(f"  {p['nombre']}: {j.nombre}")
-            final, capas = productos.raster(p, [j], trabajo.equipo, aj)
+            final, capas = productos.raster(p, [j], trabajo.equipo, aj, marca=trabajo.marca)
             nombre = productos.nombre_archivo(p, trabajo.equipo, foto=j.nombre)
             for fmt in p["impresion"]:
                 salidas.append(productos.guardar_raster(final, os.path.join(imp, nombre), fmt))
@@ -216,7 +224,7 @@ def _generar_raster(p, jug, trabajo, aj, imp, edi, progreso):
     else:
         for n, hoja in enumerate(productos.hojas(p, jug), 1):
             progreso(f"  {p['nombre']}: hoja {n}")
-            final, capas = productos.raster(p, hoja, trabajo.equipo, aj, n)
+            final, capas = productos.raster(p, hoja, trabajo.equipo, aj, n, marca=trabajo.marca)
             nombre = productos.nombre_archivo(p, trabajo.equipo, n=n)
             for fmt in p["impresion"]:
                 salidas.append(productos.guardar_raster(final, os.path.join(imp, nombre), fmt))
@@ -229,7 +237,8 @@ def _generar_raster(p, jug, trabajo, aj, imp, edi, progreso):
 def guardar_proyecto(trabajo):
     os.makedirs(trabajo.carpeta_equipo, exist_ok=True)
     datos = {
-        "version": 2, "equipo": trabajo.equipo, "carpeta_fotos": trabajo.carpeta_fotos,
+        "version": 2, "equipo": trabajo.equipo, "escudo": trabajo.escudo, "club": trabajo.club,
+        "temporada": trabajo.temporada, "carpeta_fotos": trabajo.carpeta_fotos,
         "carpeta_recortes": trabajo.carpeta_recortes, "carpeta_salida": trabajo.carpeta_salida,
         "productos": trabajo.productos, "ajustes": trabajo.ajustes,
         "jugadores": [{"foto": j.id, "tipo": j.tipo, "incluido": j.incluido, "giro": j.giro,
@@ -245,7 +254,8 @@ def abrir_proyecto(ruta, progreso=print):
     with open(ruta, encoding="utf-8") as f:
         d = json.load(f)
     t = Trabajo(equipo=d["equipo"], carpeta_fotos=d["carpeta_fotos"], carpeta_salida=d["carpeta_salida"],
-                carpeta_recortes=d.get("carpeta_recortes"), productos=d["productos"], ajustes=d.get("ajustes", {}))
+                carpeta_recortes=d.get("carpeta_recortes"), productos=d["productos"], ajustes=d.get("ajustes", {}),
+                escudo=d.get("escudo"), club=d.get("club"), temporada=d.get("temporada"))
     t.jugadores = []
     for x in d["jugadores"]:
         j = Jugador(ruta=os.path.join(t.carpeta_fotos, x["foto"]), tipo=x["tipo"], incluido=x["incluido"],

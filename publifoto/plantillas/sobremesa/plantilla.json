@@ -123,5 +123,6 @@
     "entrenador",
     "equipo"
   ],
-  "guardar_recortes": true
+  "guardar_recortes": true,
+  "escudo_pdf": true
 }

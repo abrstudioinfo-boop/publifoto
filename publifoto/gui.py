@@ -7,11 +7,12 @@ from PIL import Image, ImageOps
 from PySide6.QtCore import QObject, QSettings, Qt, QThread, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QImage, QPixmap
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFrame, QGridLayout,
-                               QHBoxLayout, QInputDialog, QLabel, QListWidget, QListWidgetItem, QMainWindow,
+                               QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+                               QMainWindow,
                                QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSlider,
                                QVBoxLayout, QWidget)
 
-from . import encuadre, motor, productos, revision
+from . import actualizar, club, encuadre, motor, productos, revision
 from .analisis import abrir, girar
 
 TIPOS = {"jugador": "Jugador", "entrenador": "Entrenador", "equipo": "Foto de equipo"}
@@ -311,6 +312,35 @@ class Ventana(QMainWindow):
         prod.addStretch()
         lay.addLayout(prod)
 
+        # escudo y nombre del club: cambian en 15 x 20, calendarios e imanes
+        marca = QHBoxLayout()
+        marca.addWidget(QLabel("<b>Escudo del club:</b>"))
+        self.combo_escudo = QComboBox()
+        self.combo_escudo.setMinimumWidth(240)
+        self.vista_escudo = QLabel()
+        self.vista_escudo.setFixedSize(44, 44)
+        self.vista_escudo.setAlignment(Qt.AlignCenter)
+        b_logos = QPushButton("Añadir logos…")
+        b_logos.setToolTip("Elige una carpeta con los escudos de los clubs: el nombre de cada archivo es el del club.")
+        b_logos.clicked.connect(self.anadir_logos)
+        self.txt_club = QLineEdit()
+        self.txt_club.setPlaceholderText("C.F. AMPOSTA")
+        self.txt_club.setMinimumWidth(200)
+        self.txt_club.setToolTip("Nombre del club en la franja de los imanes")
+        self.txt_temporada = QLineEdit(club.temporada_actual())
+        self.txt_temporada.setFixedWidth(60)
+        b_plantillas = QPushButton("Plantillas…")
+        b_plantillas.setToolTip("Actualizar una plantilla con el archivo de un año nuevo")
+        b_plantillas.clicked.connect(self.dialogo_plantillas)
+        for w in (self.combo_escudo, self.vista_escudo, b_logos, QLabel("  Nombre en imanes:"), self.txt_club,
+                  QLabel("Temporada:"), self.txt_temporada):
+            marca.addWidget(w)
+        marca.addStretch()
+        marca.addWidget(b_plantillas)
+        lay.addLayout(marca)
+        self.pintar_logos(self.ajustes_app.value("escudo", ""))
+        self.combo_escudo.currentIndexChanged.connect(self.escudo_cambiado)
+
         sal = QHBoxLayout()
         self.lbl_salida = QLabel()
         b = QPushButton("Cambiar carpeta de resultados…")
@@ -360,13 +390,120 @@ class Ventana(QMainWindow):
         self.activar(False)
         self.actualizar_salida()
 
+    # --- escudo del club y plantillas ---------------------------------------
+    def pintar_logos(self, elegido=None):
+        self.combo_escudo.blockSignals(True)
+        self.combo_escudo.clear()
+        self.combo_escudo.addItem("El de la plantilla (C.F. AMPOSTA)", None)
+        for nombre, ruta in club.lista_logos():
+            self.combo_escudo.addItem(nombre, ruta)
+        i = self.combo_escudo.findData(elegido) if elegido else 0
+        self.combo_escudo.setCurrentIndex(max(0, i))
+        self.combo_escudo.blockSignals(False)
+        self._pintar_escudo()
+
+    def _pintar_escudo(self):
+        ruta = self.combo_escudo.currentData()
+        if ruta and os.path.exists(ruta):
+            self.vista_escudo.setPixmap(a_pixmap(club.ajustado(ruta, (88, 88))).scaled(
+                44, 44, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            self.vista_escudo.clear()
+
+    def escudo_cambiado(self):
+        ruta = self.combo_escudo.currentData()
+        self.ajustes_app.setValue("escudo", ruta or "")
+        self.txt_club.setText(club.texto_club(self.combo_escudo.currentText()) if ruta else "")
+        self._pintar_escudo()
+
+    def anadir_logos(self):
+        carpeta = QFileDialog.getExistingDirectory(self, "Carpeta con los escudos de los clubs")
+        if not carpeta:
+            return
+        nuevos = club.importar_logos(carpeta)
+        self.pintar_logos(self.combo_escudo.currentData())
+        QMessageBox.information(self, "Logos", f"Se han añadido {len(nuevos)} escudos." if nuevos else
+                                "En esa carpeta no hay imágenes de escudos (PNG, TIF o JPG).")
+
+    def marca_a_trabajo(self, t):
+        """Lo elegido en la ventana pasa al trabajo; el nombre del club se recuerda para ese escudo."""
+        t.escudo = self.combo_escudo.currentData()
+        t.club = self.txt_club.text().strip() or None
+        t.temporada = self.txt_temporada.text().strip() or None
+        if t.escudo and t.club:
+            club.guardar_texto_club(self.combo_escudo.currentText(), t.club)
+
+    def marca_de_trabajo(self, t):
+        if t.escudo and self.combo_escudo.findData(t.escudo) < 0 and os.path.exists(t.escudo):
+            self.combo_escudo.addItem(os.path.splitext(os.path.basename(t.escudo))[0], t.escudo)
+        self.combo_escudo.blockSignals(True)
+        self.combo_escudo.setCurrentIndex(max(0, self.combo_escudo.findData(t.escudo)) if t.escudo else 0)
+        self.combo_escudo.blockSignals(False)
+        self._pintar_escudo()
+        self.txt_club.setText(t.club or "")
+        self.txt_temporada.setText(t.temporada or club.temporada_actual())
+
+    def dialogo_plantillas(self):
+        d = QDialog(self)
+        d.setWindowTitle("Plantillas")
+        v = QVBoxLayout(d)
+        v.addWidget(QLabel("Para poner la plantilla de un año nuevo, elige su archivo original.\n"
+                           "El programa la convierte, la prueba y, si sale bien, la usa a partir de ahora."))
+        elegido = {}
+        for id_, (nombre, filtro, ayuda) in actualizar.ACTUALIZABLES.items():
+            fila = QHBoxLayout()
+            etiqueta = QLabel(f"<b>{nombre}</b><br><small>{actualizar.info(id_)}</small>")
+            etiqueta.setToolTip(ayuda)
+            b = QPushButton("Actualizar…")
+            b.setToolTip(ayuda)
+            o = QPushButton("Volver a la original")
+            o.setEnabled(actualizar.info(id_) != "La que viene con el programa")
+
+            def pedir(_=False, id_=id_, filtro=filtro, nombre=nombre):
+                ruta, _f = QFileDialog.getOpenFileName(d, f"Archivo nuevo: {nombre}", "", filtro)
+                if ruta:
+                    elegido.update(id_=id_, ruta=ruta)
+                    d.accept()
+
+            def original(_=False, id_=id_, nombre=nombre):
+                if QMessageBox.question(d, "Volver a la original",
+                                        f"¿Usar otra vez la plantilla de {nombre} que viene con el programa?") \
+                        == QMessageBox.Yes:
+                    actualizar.restaurar(id_)
+                    d.reject()
+                    self.dialogo_plantillas()
+
+            b.clicked.connect(pedir)
+            o.clicked.connect(original)
+            fila.addWidget(etiqueta, 1)
+            fila.addWidget(o)
+            fila.addWidget(b)
+            v.addLayout(fila)
+        v.addWidget(QLabel("<small>Cartas todavía no se puede actualizar desde aquí.</small>"))
+        cerrar = QPushButton("Cerrar")
+        cerrar.clicked.connect(d.reject)
+        v.addWidget(cerrar, 0, Qt.AlignRight)
+        if d.exec() == QDialog.Accepted and elegido:
+            self.en_segundo_plano(lambda prog: actualizar.actualizar(elegido["id_"], elegido["ruta"], prog),
+                                  self.plantilla_actualizada)
+
+    def plantilla_actualizada(self, r):
+        caja = QMessageBox(self)
+        caja.setWindowTitle("Plantilla actualizada")
+        caja.setText("✓ La plantilla nueva funciona y se usa a partir de ahora.\n\n" + r["resumen"] +
+                     ("\n\n⚠ " + "\n".join(r["avisos"]) if r["avisos"] else ""))
+        if r.get("vista"):
+            caja.setIconPixmap(QPixmap(r["vista"]).scaled(320, 320, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        caja.exec()
+
     # --- carga -------------------------------------------------------------
     def activar(self, si):
         self.b_generar.setEnabled(si)
         self.b_revisar.setEnabled(si)
         # mientras trabaja en segundo plano no se puede tocar nada que el motor esté leyendo
         ocupado = self.hilo is not None and self.hilo.isRunning()
-        for w in (self.rejilla, self.lista_avisos, self.zona, self.zona_rec, *self.casillas.values()):
+        for w in (self.rejilla, self.lista_avisos, self.zona, self.zona_rec, *self.casillas.values(),
+                  self.combo_escudo, self.txt_club, self.txt_temporada):
             w.setEnabled(not ocupado)
 
     def ocupado(self):
@@ -429,6 +566,7 @@ class Ventana(QMainWindow):
     def _proyecto_abierto(self, t):
         self.trabajo = t
         self.desde_proyecto = True
+        self.marca_de_trabajo(t)
         self.zona.setText(f"Fotos: {t.carpeta_fotos}\nEquipo: {t.equipo}")
         for id_, c in self.casillas.items():
             c.setChecked(id_ in t.productos)
@@ -586,6 +724,7 @@ class Ventana(QMainWindow):
     def generar(self):
         t = self.trabajo
         t.productos = self.productos_elegidos()
+        self.marca_a_trabajo(t)
         if not t.productos:
             QMessageBox.information(self, "Nada que hacer", "Marca al menos un producto.")
             return

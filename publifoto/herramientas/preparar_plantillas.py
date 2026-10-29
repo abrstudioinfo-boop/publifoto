@@ -1,8 +1,10 @@
 """Convierte las plantillas originales de Adobe (.ai, .pdf, .tif con capas) en
 plantillas abiertas que el programa usa sin Adobe.
 
-Solo lo ejecuta quien mantiene el programa, una vez por plantilla:
+Lo ejecuta quien mantiene el programa, una vez por plantilla:
     python -m publifoto.herramientas.preparar_plantillas "<carpeta con los originales>"
+y el propio programa, con el botón «Actualizar plantilla…» (ver actualizar.py), para
+poner la plantilla de un año nuevo sin tocar el programa.
 """
 import json
 import os
@@ -19,16 +21,17 @@ Image.MAX_IMAGE_PIXELS = None
 DESTINO = os.path.join(os.path.dirname(os.path.dirname(__file__)), "plantillas")
 
 
-def _guardar(id_, cfg):
-    os.makedirs(os.path.join(DESTINO, id_), exist_ok=True)
-    with open(os.path.join(DESTINO, id_, "plantilla.json"), "w", encoding="utf-8") as f:
+def _guardar(carpeta, cfg):
+    os.makedirs(carpeta, exist_ok=True)
+    with open(os.path.join(carpeta, "plantilla.json"), "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
-    print("plantilla lista:", id_)
+    print("plantilla lista:", cfg["id"])
 
 
-def _pdf_sin_fotos(origen, pagina, filtro_foto, texto_quitar=None):
-    """Copia una página quitando las fotos (y opcionalmente un texto) sin tocar
-    el resto del diseño vectorial."""
+def _pdf_sin_fotos(origen, pagina, filtro_foto, texto_quitar=()):
+    """Copia una página quitando las fotos (y los textos de texto_quitar) sin tocar
+    el resto del diseño vectorial. Devuelve también los textos quitados:
+    {texto: [(span, dirección de la línea), ...]}."""
     src = fitz.open(origen)
     d = fitz.open()
     d.insert_pdf(src, from_page=pagina, to_page=pagina)
@@ -54,18 +57,18 @@ def _pdf_sin_fotos(origen, pagina, filtro_foto, texto_quitar=None):
         duenyo = pg.xref if stream in pg.get_contents() else stream
         for n in nombres:
             d.xref_set_key(duenyo, f"Resources/XObject/{n}", "null")
-    texto = None
+    quitados = {}
     if texto_quitar:
         for b in pg.get_text("dict")["blocks"]:
             for l in b.get("lines", []):
                 for s in l["spans"]:
-                    if s["text"].strip() == texto_quitar:
-                        texto = s
+                    if s["text"].strip() in texto_quitar:
+                        quitados.setdefault(s["text"].strip(), []).append((s, l["dir"]))
                         pg.add_redact_annot(fitz.Rect(s["bbox"]), fill=False)
         pg.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE,
                             graphics=fitz.PDF_REDACT_LINE_ART_NONE,
                             text=fitz.PDF_REDACT_TEXT_REMOVE)
-    return d, fotos, texto
+    return d, fotos, quitados
 
 
 def _icc_fogra39(d):
@@ -175,19 +178,47 @@ def _dentro(a, b):
     return ancho * alto / ((a[2] - a[0]) * (a[3] - a[1])) if ancho > 0 and alto > 0 else 0.0
 
 
-def imanes(carpeta):
+def _club_y_temporada(quitados):
+    """Los textos del club y de la temporada de cada imán (de abajo arriba, en la
+    franja negra) pasan a ser {CLUB} y {TEMPORADA}: se cambian en cada equipo."""
+    textos = []
+    for buscado, clave in (("C.F. AMPOSTA", "{CLUB}"), ("26/27", "{TEMPORADA}")):
+        for s, direccion in quitados.get(buscado, []):
+            x0, y0, x1, y1 = s["bbox"]
+            if abs(direccion[0]) > 0.5:   # texto horizontal: no es el de la franja
+                continue
+            # 0.85 de la cuerda del círculo en la franja: nombres largos se reducen
+            textos.append({"texto": clave, "giro": 90, "base_x": round(s["origin"][0], 2),
+                           "centro_y": round((y0 + y1) / 2, 2), "tam": s["size"],
+                           "fuente": "SourceSans3-Bold.ttf", "color": [1, 1, 1],
+                           "largo_max": 150 if clave == "{CLUB}" else 60})
+    return textos
+
+
+def imanes(origen, carpeta=None):
+    """origen: el .ai (o el PDF) de los imanes, con fotos de ejemplo; carpeta: dónde
+    se guarda la plantilla (por defecto, dentro del programa)."""
     id_ = "imanes"
-    d, fotos, texto = _pdf_sin_fotos(os.path.join(carpeta, "IMANS FUTBOL.ai"), 0,
-                                     lambda i: i["width"] > 1000, texto_quitar="S10 A")
+    carpeta = carpeta or os.path.join(DESTINO, id_)
+    d, fotos, quitados = _pdf_sin_fotos(origen, 0, lambda i: i["width"] > 1000,
+                                        texto_quitar=("S10 A", "C.F. AMPOSTA", "26/27"))
+    if "S10 A" not in quitados:
+        raise ValueError("No se encuentra el nombre del equipo de ejemplo («S10 A») en la plantilla.")
+    texto = quitados["S10 A"][0][0]
     pg = d[0]
     clips = []
     for dr in pg.get_drawings(extended=True):
         if dr["type"] == "clip" and 150 < dr["scissor"].width < 400:
             r = tuple(round(v, 2) for v in dr["scissor"])
             # el .ai repite algunos círculos (y trozos de círculo) encima de otros:
-            # cada uno se llevaría un jugador y el de encima taparía al de debajo
-            if not any(_dentro(r, c) > 0.5 or _dentro(c, r) > 0.5 for c in clips):
+            # cada uno se llevaría un jugador y el de encima taparía al de debajo.
+            # De los que se solapan se queda el más grande (el círculo entero).
+            otro = next((c for c in clips if _dentro(r, c) > 0.5 or _dentro(c, r) > 0.5), None)
+            area = lambda c: (c[2] - c[0]) * (c[3] - c[1])
+            if otro is None:
                 clips.append(r)
+            elif area(r) > area(otro):
+                clips[clips.index(otro)] = r
     # la foto va en un cuadrado mayor que el círculo (sangrado para el troquel):
     # en los imanes aprobados el círculo ocupa del 9,7 % al 90,3 % del cuadrado
     huecos = []
@@ -196,25 +227,37 @@ def imanes(carpeta):
         m = (lado - (c[2] - c[0])) / 2
         huecos.append({"rect": [round(c[0] - m, 2), round(c[1] - m, 2), round(c[2] + m, 2), round(c[3] + m, 2)],
                        "circulo": list(c)})
-    os.makedirs(os.path.join(DESTINO, id_), exist_ok=True)
-    d.save(os.path.join(DESTINO, id_, "fondo.pdf"), garbage=4, deflate=True)
+    if not huecos:
+        raise ValueError("No se encuentran los círculos de los imanes en la plantilla.")
+    os.makedirs(carpeta, exist_ok=True)
+    d.save(os.path.join(carpeta, "fondo.pdf"), garbage=4, deflate=True)
     # el nombre del equipo va centrado donde estaba el de ejemplo
     x0, y0, x1, y1 = texto["bbox"]
-    _guardar(id_, {
+    _guardar(carpeta, {
         "id": id_, "nombre": "IMANES", "tipo": "pdf", "color": "RGB", "fondo": "fondo.pdf",
         "huecos": huecos, "jugadores_por_hoja": len(huecos), "ppp_fotos": 400,
         "encuadre": {"margen": 0.216, "alto_rel": 5.36, "centro": -0.033, "referencia": "mixto"},
         "textos": [{"texto": "{EQUIPO}", "centro_x": round((x0 + x1) / 2, 2) + 3.7, "base_y": round(texto["origin"][1], 2),
-                    "tam": texto["size"], "fuente": "SourceSans3-Regular.ttf", "color": [0, 0, 0]}],
+                    "tam": texto["size"], "fuente": "SourceSans3-Regular.ttf", "color": [0, 0, 0]}]
+                  + _club_y_temporada(quitados),
         "impresion": ["pdf", "jpg"], "editable": "pdf", "archivo": "IMANES {EQUIPO}",
         "excluir": ["entrenador", "equipo"],
     })
 
 
-def sobremesa(carpeta):
+def _año(pg):
+    """El año del calendario: el número de cuatro cifras (20xx) que más sale."""
+    años = re.findall(r"\b(20\d\d)\b", pg.get_text())
+    return max(set(años), key=años.count) if años else ""
+
+
+def sobremesa(origen, carpeta=None):
+    """origen: el PDF del calendario de sobremesa (exportado de InDesign), con fotos
+    de ejemplo; carpeta: dónde se guarda la plantilla."""
     id_ = "sobremesa"
-    origen = os.path.join(carpeta, "CALENDARI SOBRETAULA 2027.pdf")
+    carpeta = carpeta or os.path.join(DESTINO, id_)
     d, fotos, _ = _pdf_sin_fotos(origen, 0, lambda i: i["width"] > 850 and i["height"] > 1000)
+    año = _año(d[0])
     # marcos rojos (trazo de 0,77 mm del propio marco, ya incluido en el fondo)
     marcos = []
     for dr in d[0].get_drawings():
@@ -234,22 +277,26 @@ def sobremesa(carpeta):
             "zona": [round(lado * W / 2, 2), 0, round((lado + 1) * W / 2, 2), round(d[0].rect.height, 2)],
             "huecos": [{"rect": baix["rect"], "espejo_vertical": False, "nombre": "BAIX"},
                        {"rect": dalt["rect"], "espejo_vertical": True, "nombre": "DALT"}]})
-    os.makedirs(os.path.join(DESTINO, id_), exist_ok=True)
+    if len(marcos) != 4:
+        raise ValueError(f"Se esperaban 4 marcos rojos para las fotos y hay {len(marcos)}.")
+    os.makedirs(carpeta, exist_ok=True)
     _icc_fogra39(d)
-    fondo = os.path.join(DESTINO, id_, "fondo.pdf")
+    fondo = os.path.join(carpeta, "fondo.pdf")
     d.save(fondo, garbage=4, deflate=True)
     # hoja con un solo jugador: fondo solo con el calendario izquierdo (y las marcas
     # de corte centrales, que están en x = 226 mm)
-    media_hoja(fondo, os.path.join(DESTINO, id_, "fondo_izquierda.pdf"), W / 2 + 2 * 72 / 25.4)
-    _guardar(id_, {
+    media_hoja(fondo, os.path.join(carpeta, "fondo_izquierda.pdf"), W / 2 + 2 * 72 / 25.4)
+    _guardar(carpeta, {
         "id": id_, "nombre": "CALENDARIOS SOBREMESA", "tipo": "pdf", "color": "CMYK", "fondo": "fondo.pdf",
         "calendarios": calendarios, "marcos": marcos, "ppp_fotos": 300,
         "fondos_parciales": {"1": "fondo_izquierda.pdf"},
         # reglas aprobadas (REGLAS.txt de la sesión CALENDARIOS SOBRE MESA) y medido en S9 A:
         # pelo al 10 % del marco, bajo de la camiseta un 4 % por debajo, centrado entre cara y cuerpo
         "encuadre": {"margen": 0.10, "alto_rel": 3.73, "centro": 0.0, "referencia": "mixto"},
-        "impresion": ["pdf"], "editable": "pdf", "archivo": "CALENDARI SOBRETAULA 2027 - {EQUIPO}",
+        "impresion": ["pdf"], "editable": "pdf",
+        "archivo": f"CALENDARI SOBRETAULA {año} - {{EQUIPO}}".replace("  ", " "),
         "excluir": ["entrenador", "equipo"], "guardar_recortes": True,
+        "escudo_pdf": True,   # la marca de agua del fondo es el escudo: se cambia por el del club
     })
 
 
@@ -262,16 +309,30 @@ def _capa_png(capa, ruta):
     return os.path.basename(ruta) + ".png"
 
 
-def foto_con_logo(carpeta, id_, archivo, nombre, color, encuadre, impresion, editable, nombre_archivo, excluir):
-    (W, H), modo, capas = leer_capas(os.path.join(carpeta, archivo), solo=lambda n: "AMPOSTA" in n.upper())
-    os.makedirs(os.path.join(DESTINO, id_), exist_ok=True)
+def _es_logo(capa, W, H):
+    """La capa del escudo: visible, con píxeles y pequeña (las fotos de ejemplo de los
+    jugadores ocupan todo el lienzo)."""
+    l, t, r, b = capa["caja"]
+    return capa["visible"] and r > l and b > t and (r - l) * (b - t) < 0.15 * W * H
+
+
+def foto_con_logo(origen, id_, nombre, color, encuadre, impresion, editable, nombre_archivo, excluir,
+                  carpeta=None):
+    """origen: el TIFF con capas de Photoshop (fotos de ejemplo y el escudo)."""
+    carpeta = carpeta or os.path.join(DESTINO, id_)
+    (W, H), modo, todas = leer_capas(origen, cargar_pixeles=False)
+    logos = [c["nombre"] for c in todas if _es_logo(c, W, H)]
+    if not logos:
+        raise ValueError("No se encuentra la capa del escudo en la plantilla.")
+    (W, H), modo, capas = leer_capas(origen, solo=lambda n: n in logos)
+    os.makedirs(carpeta, exist_ok=True)
     capas_encima = []
     for c in capas:
-        if c["visible"] and ("imagen" in c or "cmyk" in c) and "AMPOSTA" in c["nombre"].upper():
+        if c["nombre"] in logos and ("imagen" in c or "cmyk" in c) and _es_logo(c, W, H):
             l, t, r, b = c["caja"]
-            f = _capa_png(c, os.path.join(DESTINO, id_, "logo"))
-            capas_encima.append({"nombre": c["nombre"], "archivo": f, "x": l, "y": t})
-    _guardar(id_, {
+            f = _capa_png(c, os.path.join(carpeta, "logo" if not capas_encima else f"logo{len(capas_encima) + 1}"))
+            capas_encima.append({"nombre": c["nombre"], "archivo": f, "x": l, "y": t, "escudo": True})
+    _guardar(carpeta, {
         "id": id_, "nombre": nombre, "tipo": "raster", "color": color, "lienzo": [W, H], "ppp": 300,
         "fondo_color": [255, 255, 255],
         "huecos": [{"rect": [0, 0, W, H]}], "jugadores_por_hoja": 1,
@@ -289,7 +350,7 @@ def llaveros():
         for i in range(5):
             x0 = round(27 + i * 460.6)
             huecos.append({"rect": [x0, fila_y, round(27 + (i + 1) * 460.6), fila_y + 650], "jugador": i})
-    _guardar(id_, {
+    _guardar(os.path.join(DESTINO, id_), {
         "id": id_, "nombre": "LLAVEROS", "tipo": "raster", "color": "RGB", "lienzo": [W, H], "ppp": 300,
         "fondo_color": [194, 194, 194], "huecos": huecos, "jugadores_por_hoja": 5,
         "encuadre": {"margen": 0.0855, "alto_rel": 2.22, "centro": -0.004, "referencia": "cara"},
@@ -298,15 +359,34 @@ def llaveros():
     })
 
 
+# lo que no sale del archivo original: encuadres medidos en los trabajos aprobados
+PARED = dict(id_="pared", nombre="CALENDARIOS PARED", color="CMYK",
+             encuadre={"margen": 0.083, "alto_rel": 4.165, "centro": 0.014, "referencia": "mixto"},
+             impresion=["tif"], editable="psd", nombre_archivo="CALENDARIO PARED {EQUIPO} - {FOTO}",
+             excluir=["equipo"])
+FOTO_15X20 = dict(id_="15x20", nombre="15 X 20 CON LOGO", color="RGB",
+                  encuadre={"margen": 0.083, "alto_rel": 4.03, "centro": 0.016, "referencia": "mixto"},
+                  impresion=["jpg"], editable="psd", nombre_archivo="{FOTO}", excluir=["entrenador", "equipo"])
+
+
+def preparar(id_, origen, carpeta=None):
+    """Prepara la plantilla id_ desde su archivo original."""
+    if id_ == "imanes":
+        return imanes(origen, carpeta)
+    if id_ == "sobremesa":
+        return sobremesa(origen, carpeta)
+    if id_ == "pared":
+        return foto_con_logo(origen, carpeta=carpeta, **PARED)
+    if id_ == "15x20":
+        return foto_con_logo(origen, carpeta=carpeta, **FOTO_15X20)
+    raise ValueError(f"La plantilla {id_} no se puede actualizar desde un archivo.")
+
+
 def main(carpeta):
-    imanes(carpeta)
-    sobremesa(carpeta)
-    foto_con_logo(carpeta, "pared", "CAL PARET.tif", "CALENDARIOS PARED", "CMYK",
-                  {"margen": 0.083, "alto_rel": 4.165, "centro": 0.014, "referencia": "mixto"},
-                  ["tif"], "psd", "CALENDARIO PARED {EQUIPO} - {FOTO}", ["equipo"])
-    foto_con_logo(carpeta, "15x20", os.path.join("15 x 20", "S11 A", "15 X 20.tif"), "15 X 20 CON LOGO", "RGB",
-                  {"margen": 0.083, "alto_rel": 4.03, "centro": 0.016, "referencia": "mixto"},
-                  ["jpg"], "psd", "{FOTO}", ["entrenador", "equipo"])
+    preparar("imanes", os.path.join(carpeta, "IMANS FUTBOL.ai"))
+    preparar("sobremesa", os.path.join(carpeta, "CALENDARI SOBRETAULA 2027.pdf"))
+    preparar("pared", os.path.join(carpeta, "CAL PARET.tif"))
+    preparar("15x20", os.path.join(carpeta, "15 x 20", "S11 A", "15 X 20.tif"))
     llaveros()
 
 

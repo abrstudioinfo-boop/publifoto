@@ -92,17 +92,31 @@ def _figura(i, W=1200, H=1600, entrenador=False):
     return foto, recorte, puntos
 
 
-def prueba_completa(salida, jugadores=7, entrenadores=1):
+def _escudo_de_prueba(ruta):
+    """Escudo de mentira (un blasón dibujado) para probar el cambio de logo."""
+    from PIL import Image, ImageDraw
+    im = Image.new("RGBA", (600, 720), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    d.polygon([(30, 30), (570, 30), (570, 380), (300, 690), (30, 380)], fill=(20, 90, 170, 255))
+    d.polygon([(300, 30), (570, 30), (570, 380), (300, 690)], fill=(230, 200, 40, 255))
+    d.ellipse([200, 200, 400, 400], fill=(255, 255, 255, 255))
+    im.save(ruta)
+    return ruta
+
+
+def prueba_completa(salida, jugadores=7, entrenadores=1, escudo=None, club="CLUB DE PRUEBA", productos=None):
     """Genera TODOS los productos (también cartas) con fotos de mentira dibujadas por el
     programa, para probar un ordenador sin usar fotos de nadie. Pasa por el análisis de
     verdad (silueta y cara) y después fija los puntos de cada figura, que se conocen,
-    para que lo generado no dependa de lo que el análisis vea en un dibujo. Falla si
-    falta algún archivo o alguna persona en lo generado."""
+    para que lo generado no dependa de lo que el análisis vea en un dibujo. Lleva un
+    escudo y un nombre de club de mentira para probar también el cambio de logo. Falla
+    si falta algún archivo o alguna persona en lo generado."""
     from . import motor
     from .analisis import _ruta_cache
     fotos, recortes = os.path.join(salida, "FOTOS"), os.path.join(salida, "RECORTADAS")
     os.makedirs(fotos, exist_ok=True)
     os.makedirs(recortes, exist_ok=True)
+    escudo = escudo or _escudo_de_prueba(os.path.join(salida, "ESCUDO PRUEBA.png"))
     esperados = {}
     for i in range(jugadores + entrenadores):
         entrenador = i >= jugadores
@@ -116,8 +130,8 @@ def prueba_completa(salida, jugadores=7, entrenadores=1):
             if os.path.exists(c):   # que se analice de nuevo en cada prueba
                 os.remove(c)
     t = motor.Trabajo(equipo="PRUEBA", carpeta_fotos=fotos, carpeta_salida=salida,
-                      carpeta_recortes=recortes,
-                      productos=["cartas", "15x20", "imanes", "llaveros", "pared", "sobremesa"])
+                      carpeta_recortes=recortes, escudo=escudo, club=club,
+                      productos=productos or ["cartas", "15x20", "imanes", "llaveros", "pared", "sobremesa"])
     motor.preparar(t, progreso=lambda *a: None)
     vistos = sum(1 for a in t.avisos if a.revisor == "calidad" and "nadie" in a.texto)
     print(f"  análisis hecho: {len(t.jugadores)} fotos ({vistos} sin silueta en el dibujo)")
@@ -136,9 +150,9 @@ def prueba_completa(salida, jugadores=7, entrenadores=1):
         por_producto[p] = por_producto.get(p, 0) + 1
     for p in sorted(por_producto):
         print(f"  ok  {p}: {por_producto[p]} archivos")
-    if len(por_producto) < 6:
-        fallos.append(f"solo {len(por_producto)} de 6 productos")
-        print(f"  MAL solo se han generado {len(por_producto)} de 6 productos")
+    if len(por_producto) < len(t.productos):
+        fallos.append(f"solo {len(por_producto)} de {len(t.productos)} productos")
+        print(f"  MAL solo se han generado {len(por_producto)} de {len(t.productos)} productos")
     print("PRUEBA COMPLETA BIEN" if not fallos else f"PRUEBA COMPLETA: FALLAN {len(fallos)}")
     return not fallos
 

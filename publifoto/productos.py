@@ -30,8 +30,22 @@ def ruta_fuente(nombre):
     raise FileNotFoundError(f"No se encuentra la letra {nombre}")
 
 
+def carpeta_plantillas_usuario():
+    """Plantillas actualizadas desde el programa (botón «Actualizar plantilla…»):
+    tienen preferencia sobre las que vienen dentro del programa."""
+    from .club import carpeta_datos
+    return os.path.join(carpeta_datos(), "plantillas")
+
+
+def carpeta_plantilla(id_):
+    propia = os.path.join(carpeta_plantillas_usuario(), id_)
+    if os.path.exists(os.path.join(propia, "plantilla.json")):
+        return propia
+    return os.path.join(PLANTILLAS, id_)
+
+
 def cargar_plantilla(id_):
-    carpeta = os.path.join(PLANTILLAS, id_)
+    carpeta = carpeta_plantilla(id_)
     with open(os.path.join(carpeta, "plantilla.json"), encoding="utf-8") as f:
         p = json.load(f)
     p["_carpeta"] = carpeta
@@ -95,6 +109,14 @@ def lista_plantillas():
             if os.path.exists(os.path.join(PLANTILLAS, d, "plantilla.json"))]
 
 
+def textos_marca(marca):
+    """Valores de {CLUB} y {TEMPORADA} en los textos de las plantillas."""
+    from .club import temporada_actual
+    marca = marca or {}
+    return {"CLUB": marca.get("club") or "C.F. AMPOSTA",
+            "TEMPORADA": marca.get("temporada") or temporada_actual()}
+
+
 def nombre_archivo(plantilla, equipo, n=1, foto=""):
     return plantilla["archivo"].format(EQUIPO=equipo, N=n, FOTO=foto).strip()
 
@@ -149,8 +171,9 @@ def foto_recortada(jugador, plantilla, tam, ajuste=None, recorte=False):
 
 # --- productos raster (llaveros, 15x20, pared) -------------------------------
 
-def _encima(plantilla):
+def _encima(plantilla, marca=None):
     capas = []
+    escudo = (marca or {}).get("escudo")
     for c in plantilla.get("encima", []):
         ruta = os.path.join(plantilla["_carpeta"], c["archivo"])
         im = Image.open(ruta)
@@ -158,11 +181,17 @@ def _encima(plantilla):
         alfa = None
         if im.mode == "CMYK":
             alfa = Image.open(ruta.replace(".tif", "_alfa.png")).convert("L")
+        if c.get("escudo") and escudo:
+            # el escudo del club, centrado en el sitio y con el tamaño del de la plantilla
+            from .club import ajustado
+            nombre = os.path.splitext(os.path.basename(escudo))[0]
+            capas.append((nombre, ajustado(escudo, im.size), None, c["x"], c["y"]))
+            continue
         capas.append((c["nombre"], im, alfa, c["x"], c["y"]))
     return capas
 
 
-def raster(plantilla, jugadores, equipo, ajustes, n_hoja=1):
+def raster(plantilla, jugadores, equipo, ajustes, n_hoja=1, marca=None):
     """Devuelve (imagen_final, capas) para una hoja. capas = [(nombre, im, alfa, x, y)]."""
     W, H = plantilla["lienzo"]
     cmyk = plantilla["color"] == "CMYK"
@@ -177,7 +206,7 @@ def raster(plantilla, jugadores, equipo, ajustes, n_hoja=1):
         if cmyk:
             foto = color.a_cmyk(foto)
         capas.append((j.nombre, foto, None, x0c, y0c))
-    capas += _encima(plantilla)
+    capas += _encima(plantilla, marca)
     final = capas[0][1].copy()
     for nombre, im, alfa, x, y in capas[1:]:
         if im.mode == "RGBA" and not cmyk:
@@ -239,11 +268,58 @@ def _jpeg(im, cmyk):
     return b.getvalue()
 
 
-def pdf(plantilla, hojas_jugadores, equipo, ajustes, capas=False, carpeta_recortes=None):
+def _escudo_en_pdf(doc, escudo, cmyk):
+    """Cambia el escudo de la plantilla (las imágenes que quedan en el fondo, como la
+    marca de agua del calendario de sobremesa) por el del club. Se sustituye la imagen
+    misma: conserva su sitio, su tamaño y la transparencia del diseño. El logo nuevo
+    va centrado y sin deformar dentro del rectángulo del antiguo."""
+    from .club import ajustado
+    hechos = set()
+    for pg in doc:
+        for img in pg.get_images(full=True):
+            xref, smask, w, h = img[0], img[1], img[2], img[3]
+            if xref in hechos:
+                continue
+            hechos.add(xref)
+            logo = ajustado(escudo, (w, h))
+            alfa = logo.getchannel("A")
+            blanco = Image.new("RGB", logo.size, (255, 255, 255))
+            blanco.paste(logo.convert("RGB"), mask=alfa)
+            pix = color.a_cmyk(blanco) if cmyk else blanco
+            doc.update_stream(xref, pix.tobytes(), compress=True)
+            for clave in ("DecodeParms", "Decode", "Metadata"):
+                doc.xref_set_key(xref, clave, "null")
+            doc.xref_set_key(xref, "Filter", "/FlateDecode")
+            doc.xref_set_key(xref, "BitsPerComponent", "8")
+            if not cmyk:
+                doc.xref_set_key(xref, "ColorSpace", "/DeviceRGB")
+            if smask:
+                doc.update_stream(smask, alfa.tobytes(), compress=True)
+                for clave in ("DecodeParms", "Decode", "Matte", "Metadata"):
+                    doc.xref_set_key(smask, clave, "null")
+                doc.xref_set_key(smask, "Filter", "/FlateDecode")
+            else:
+                m = doc.get_new_xref()
+                doc.update_object(m, f"<< /Type /XObject /Subtype /Image /Width {w} /Height {h} "
+                                     "/ColorSpace /DeviceGray /BitsPerComponent 8 >>")
+                doc.update_stream(m, alfa.tobytes(), compress=True)
+                doc.xref_set_key(xref, "SMask", f"{m} 0 R")
+
+
+def _abrir_fondo(plantilla, archivo, marca):
+    d = fitz.open(os.path.join(plantilla["_carpeta"], archivo))
+    escudo = (marca or {}).get("escudo")
+    if plantilla.get("escudo_pdf") and escudo:
+        _escudo_en_pdf(d, escudo, plantilla["color"] == "CMYK")
+    return d
+
+
+def pdf(plantilla, hojas_jugadores, equipo, ajustes, capas=False, carpeta_recortes=None, marca=None):
     """Crea el documento PDF completo (todas las hojas). Con capas=True cada parte
     va en su capa (Jugadores, Diseño, Texto) para editarla. Si se da
     carpeta_recortes, guarda ahí cada foto ya recortada al marco."""
-    fondo = fitz.open(os.path.join(plantilla["_carpeta"], plantilla["fondo"]))
+    fondo = _abrir_fondo(plantilla, plantilla["fondo"], marca)
+    valores = textos_marca(marca)
     cmyk = plantilla["color"] == "CMYK"
     ppp = plantilla.get("ppp_fotos", 300)
     doc = fitz.open()
@@ -265,15 +341,25 @@ def pdf(plantilla, hojas_jugadores, equipo, ajustes, capas=False, carpeta_recort
         # el diseño va encima de las fotos (marcos rojos incluidos)
         # hoja incompleta: fondo sin los calendarios que no llevan jugador
         parcial = plantilla.get("fondos_parciales", {}).get(str(len(jugadores)))
-        diseño = fitz.open(os.path.join(plantilla["_carpeta"], parcial)) if parcial else fondo
+        diseño = _abrir_fondo(plantilla, parcial, marca) if parcial else fondo
         pg.show_pdf_page(pg.rect, diseño, 0, oc=oc.get("Diseño", 0))
-        for t in plantilla.get("textos", []):
-            texto = t["texto"].format(EQUIPO=equipo)
+        for i, t in enumerate(plantilla.get("textos", [])):
+            texto = t["texto"].format(EQUIPO=equipo, **valores)
             fuente = ruta_fuente(t["fuente"])
             f = fitz.Font(fontfile=fuente)
-            ancho = f.text_length(texto, fontsize=t["tam"])
-            pg.insert_text((t["centro_x"] - ancho / 2, t["base_y"]), texto, fontsize=t["tam"],
-                           fontfile=fuente, fontname="equipo", color=t["color"], oc=oc.get("Texto", 0))
+            tam = t["tam"]
+            ancho = f.text_length(texto, fontsize=tam)
+            if t.get("largo_max") and ancho > t["largo_max"]:
+                # nombres de club largos: la letra se reduce para que quepa en la franja
+                tam *= t["largo_max"] / ancho
+                ancho = t["largo_max"]
+            if t.get("giro") == 90:
+                # de abajo arriba, centrado en centro_y; base_x es la línea base
+                pg.insert_text((t["base_x"], t["centro_y"] + ancho / 2), texto, fontsize=tam, rotate=90,
+                               fontfile=fuente, fontname=f"t{i}", color=t["color"], oc=oc.get("Texto", 0))
+            else:
+                pg.insert_text((t["centro_x"] - ancho / 2, t["base_y"]), texto, fontsize=tam,
+                               fontfile=fuente, fontname=f"t{i}", color=t["color"], oc=oc.get("Texto", 0))
     return doc
 
 

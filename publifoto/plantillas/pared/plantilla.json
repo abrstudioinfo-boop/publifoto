@@ -35,7 +35,8 @@
       "nombre": "CF AMPOSTA NOU",
       "archivo": "logo.tif",
       "x": 2946,
-      "y": 4164
+      "y": 4164,
+      "escudo": true
     }
   ],
   "impresion": [
