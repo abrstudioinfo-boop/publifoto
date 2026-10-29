@@ -14,4 +14,8 @@ if not exist publifoto\recursos\modelos\u2net_human_seg.onnx (
 )
 python -m publifoto.comprobar || exit /b 1
 pyinstaller --noconfirm --clean --distpath dist --workpath build empaquetar\publifoto.spec || exit /b 1
+rem el .exe no tiene consola: el informe de la prueba queda en comprobar.txt
 dist\Publifoto\Publifoto.exe --comprobar
+set RESULTADO=%ERRORLEVEL%
+type "%LOCALAPPDATA%\Publifoto\cache\comprobar.txt"
+exit /b %RESULTADO%

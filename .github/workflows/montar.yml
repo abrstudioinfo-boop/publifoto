@@ -1,7 +1,8 @@
-# Monta Publifoto.dmg en Macs de GitHub: uno con chip Apple (M1 o posterior) y otro Intel.
+# Monta Publifoto en ordenadores de GitHub: .dmg para Mac con chip Apple (M1 o posterior)
+# y para Mac Intel, y la carpeta con Publifoto.exe para Windows.
 # Se lanza solo al subir cambios, o a mano en Actions > "Montar para Mac" > Run workflow.
-# Los .dmg quedan para descargar en la página del montaje, en "Artifacts".
-name: Montar para Mac
+# Los montajes quedan para descargar en la página del montaje, en "Artifacts".
+name: Montar Publifoto
 
 on:
   push:
@@ -33,4 +34,21 @@ jobs:
         with:
           name: ${{ matrix.nombre }}
           path: dist/Publifoto.dmg
+          retention-days: 30
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Montar
+        shell: cmd
+        run: empaquetar\construir_windows.bat
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Publifoto-Windows
+          path: dist/Publifoto
           retention-days: 30
