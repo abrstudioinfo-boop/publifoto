@@ -32,7 +32,7 @@ Resultado:
 | Producto | Impresión | Editable | Quién sale |
 |---|---|---|---|
 | CARTAS | TIFF CMYK FOGRA39, una por jugador | PSD (fondo, jugador, logo y textos) | jugadores, necesita recorte |
-| IMANES | PDF + TIFF CMYK FOGRA39, 12 por hoja (franja en negro enriquecido, línea de corte y textos solo en negro) | PDF por capas | jugadores |
+| IMANES | PDF + JPG RGB, 12 por hoja (la plantilla de serie). Al actualizarla con el .ai («Plantillas…») pasa a PDF + TIFF CMYK FOGRA39: franja en negro enriquecido, línea de corte y textos solo en negro | PDF por capas | jugadores |
 | LLAVEROS | JPG RGB, 5 por hoja y repetidos | PSD por capas | jugadores |
 | CALENDARIOS PARED | TIFF CMYK, uno por persona | un PSD con una capa por persona | jugadores y entrenadores |
 | CALENDARIOS SOBREMESA | PDF CMYK FOGRA39, 2 por hoja; foto = marco rojo exacto; si son impares, media hoja en blanco | PDF por capas + FOTOS/ (recortes y _DALT) | jugadores |

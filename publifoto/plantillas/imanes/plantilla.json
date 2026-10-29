@@ -2,7 +2,7 @@
   "id": "imanes",
   "nombre": "IMANES",
   "tipo": "pdf",
-  "color": "CMYK",
+  "color": "RGB",
   "fondo": "fondo.pdf",
   "huecos": [
     {
@@ -192,8 +192,7 @@
       "color": [
         0,
         0,
-        0,
-        1
+        0
       ]
     },
     {
@@ -204,10 +203,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 150
     },
@@ -219,10 +217,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 150
     },
@@ -234,10 +231,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 150
     },
@@ -249,10 +245,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 150
     },
@@ -264,10 +259,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 150
     },
@@ -279,10 +273,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 150
     },
@@ -294,10 +287,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 150
     },
@@ -309,10 +301,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 150
     },
@@ -324,10 +315,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 150
     },
@@ -339,10 +329,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 150
     },
@@ -354,10 +343,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 150
     },
@@ -369,10 +357,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 150
     },
@@ -384,10 +371,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 60
     },
@@ -399,10 +385,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 60
     },
@@ -414,10 +399,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 60
     },
@@ -429,10 +413,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 60
     },
@@ -444,10 +427,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 60
     },
@@ -459,10 +441,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 60
     },
@@ -474,10 +455,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 60
     },
@@ -489,10 +469,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 60
     },
@@ -504,10 +483,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 60
     },
@@ -519,10 +497,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 60
     },
@@ -534,10 +511,9 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 60
     },
@@ -549,17 +525,16 @@
       "tam": 14.0,
       "fuente": "SourceSans3-Bold.ttf",
       "color": [
-        0,
-        0,
-        0,
-        0
+        1,
+        1,
+        1
       ],
       "largo_max": 60
     }
   ],
   "impresion": [
     "pdf",
-    "tif"
+    "jpg"
   ],
   "editable": "pdf",
   "archivo": "IMANES {EQUIPO}",
