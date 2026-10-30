@@ -9,11 +9,12 @@ from PySide6.QtCore import QObject, QSettings, Qt, QThread, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QImage, QPixmap
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFrame, QGridLayout,
                                QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-                               QMainWindow,
+                               QMainWindow, QSizePolicy,
                                QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSlider,
                                QVBoxLayout, QWidget)
 
-from . import actualizar, club, encuadre, motor, productos, revision
+from . import actualizar, club, encuadre, motor, productos, revision, tema
+from .tema import rol
 from .analisis import abrir, girar
 
 TIPOS = {"jugador": "Jugador", "entrenador": "Entrenador", "equipo": "Foto de equipo"}
@@ -30,6 +31,11 @@ def miniatura(ruta, lado=1200):
         im.thumbnail((lado, lado))
         _miniaturas[(ruta, lado)] = im
     return _miniaturas[(ruta, lado)]
+
+
+def corta(ruta, partes=2):
+    trozos = os.path.normpath(ruta).split(os.sep)
+    return ("…" + os.sep if len(trozos) > partes else "") + os.sep.join(trozos[-partes:])
 
 
 def a_pixmap(im):
@@ -66,18 +72,30 @@ class Tarea(QObject):
 class ZonaArrastre(QLabel):
     soltada = Signal(str)
 
-    def __init__(self, texto):
-        super().__init__(texto)
+    def __init__(self, titulo, detalle):
+        super().__init__()
         self.setAlignment(Qt.AlignCenter)
         self.setAcceptDrops(True)
-        self.setMinimumHeight(90)
+        self.setMinimumHeight(104)
         self.setWordWrap(True)
+        self.setCursor(Qt.PointingHandCursor)
+        self.mostrar(titulo, detalle)
         self._estilo(False)
+
+    def mostrar(self, titulo, detalle, hecho=False):
+        if hecho:
+            self.setToolTip(detalle)
+            detalle = corta(detalle)
+        marca = f"<span style='color:{tema.VERDE}'>✓</span> " if hecho else ""
+        self.setText(f"<div style='font-size:16px;font-weight:700'>{marca}{titulo}</div>"
+                     f"<div style='color:{tema.SUAVE};font-size:12px;margin-top:4px'>{detalle}</div>")
 
     def _estilo(self, activo):
         self.setStyleSheet(
-            "QLabel{border:2px dashed %s;border-radius:12px;font-size:15px;padding:12px;color:#333;background:%s}"
-            % (("#1d7f5a", "#e6f5ee") if activo else ("#999", "#fafafa")))
+            "QLabel{border:1.5px dashed %s;border-radius:16px;padding:14px;background:%s}"
+            "QLabel:hover{border-color:rgba(61,91,255,0.8)}"
+            % (("rgba(61,91,255,0.95)", "rgba(31,59,255,0.14)") if activo
+               else ("rgba(120,150,255,0.30)", "rgba(255,255,255,0.02)")))
 
     def dragEnterEvent(self, e):
         if e.mimeData().hasUrls():
@@ -110,22 +128,22 @@ class Revision(QDialog):
         self.t = trabajo
         self._ir_a = foto
         lay = QHBoxLayout(self)
+        lay.setContentsMargins(20, 18, 20, 18)
+        lay.setSpacing(16)
         izq = QVBoxLayout()
         self.producto = QComboBox()
         self.plantillas = [productos.cargar_plantilla(i) for i in trabajo.productos]
         for p in self.plantillas:
             self.producto.addItem(p["nombre"], p["id"])
         self.lista = QListWidget()
-        izq.addWidget(QLabel("Producto"))
+        izq.addWidget(tema.ceja("Producto"))
         izq.addWidget(self.producto)
-        izq.addWidget(QLabel("Jugadores"))
+        izq.addWidget(tema.ceja("Jugadores"))
         izq.addWidget(self.lista, 1)
         lay.addLayout(izq, 1)
         der = QVBoxLayout()
-        self.vista = QLabel()
-        self.vista.setAlignment(Qt.AlignCenter)
+        self.vista = tema.Vista()
         self.vista.setMinimumSize(520, 620)
-        self.vista.setStyleSheet("background:#333")
         der.addWidget(self.vista, 1)
         botones = QGridLayout()
         for txt, d, f, c in [("▲ Subir", (0, 0.01, 1), 0, 1), ("◀ Izquierda", (0.01, 0, 1), 1, 0),
@@ -152,11 +170,13 @@ class Revision(QDialog):
         der.addWidget(self.b_auto)
         self.lbl_avisos = QLabel()
         self.lbl_avisos.setWordWrap(True)
-        self.lbl_avisos.setStyleSheet("color:#8a5a00")
+        rol(self.lbl_avisos, "aviso")
         der.addWidget(self.lbl_avisos)
-        der.addWidget(QLabel("El giro manual endereza al jugador en todos los productos; el encuadre se recalcula "
-                             "para que tenga las mismas medidas que los demás."))
-        cerrar = QPushButton("Listo")
+        nota = rol(QLabel("El giro manual endereza al jugador en todos los productos; el encuadre se recalcula "
+                          "para que tenga las mismas medidas que los demás."), "suave")
+        nota.setWordWrap(True)
+        der.addWidget(nota)
+        cerrar = rol(QPushButton("Listo"), "primario")
         cerrar.clicked.connect(self.accept)
         der.addWidget(cerrar)
         lay.addLayout(der, 2)
@@ -290,12 +310,19 @@ class EncuadrePlantilla(QDialog):
         self.ejemplos = self._ejemplos(trabajo)
         self.capas = self._capas(marca)
         v = QVBoxLayout(self)
+        v.setContentsMargins(24, 20, 24, 20)
+        v.setSpacing(12)
+        v.addWidget(tema.ceja(f"[ encuadre ]  {self.p['nombre']}"))
         if texto:
             t = QLabel(texto)
             t.setWordWrap(True)
+            t.setStyleSheet(f"color:{tema.VERDE}")
             v.addWidget(t)
-        v.addWidget(QLabel("<b>¿Cómo quieres que salga el jugador?</b> Lo que guardes aquí es como saldrán "
-                           "todos los jugadores de este producto a partir de ahora."))
+        v.addWidget(rol(QLabel("¿Cómo quieres que salga el jugador?"), "titulo"))
+        sub = rol(QLabel("Lo que guardes aquí es como saldrán todos los jugadores de este producto a partir de "
+                         "ahora."), "suave")
+        sub.setWordWrap(True)
+        v.addWidget(sub)
         fila = QHBoxLayout()
         fila.addWidget(QLabel("Jugador de ejemplo:"))
         self.combo = QComboBox()
@@ -304,10 +331,8 @@ class EncuadrePlantilla(QDialog):
         self.combo.currentIndexChanged.connect(lambda _: self.pintar())
         fila.addWidget(self.combo, 1)
         v.addLayout(fila)
-        self.vista = QLabel()
-        self.vista.setAlignment(Qt.AlignCenter)
+        self.vista = tema.Vista()
         self.vista.setMinimumSize(480, 500)
-        self.vista.setStyleSheet("background:#333")
         v.addWidget(self.vista, 1)
         botones = QGridLayout()
         for txt, accion, f, c in [("▲ Jugador más arriba", ("margen", -0.005), 0, 1),
@@ -324,14 +349,14 @@ class EncuadrePlantilla(QDialog):
         antes.clicked.connect(self.como_estaba)
         botones.addWidget(antes, 1, 1)
         v.addLayout(botones)
-        self.lbl = QLabel()
+        self.lbl = rol(QLabel(), "suave")
         self.lbl.setAlignment(Qt.AlignCenter)
         v.addWidget(self.lbl)
         fila = QHBoxLayout()
         fila.addStretch(1)
         cancelar = QPushButton("Dejarlo como estaba")
         cancelar.clicked.connect(self.reject)
-        guardar = QPushButton("Guardar como predeterminado")
+        guardar = rol(QPushButton("Guardar como predeterminado"), "primario")
         guardar.setDefault(True)
         guardar.clicked.connect(self.guardar)
         fila.addWidget(cancelar)
@@ -429,115 +454,155 @@ class EncuadrePlantilla(QDialog):
 class Ventana(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Programa Publifoto")
-        self.resize(1100, 800)
+        self.setWindowTitle("Publifoto")
+        self.resize(1240, 880)
+        self.setMinimumSize(1020, 720)
         self.ajustes_app = QSettings("Publifoto", "Programa")
         self.trabajo = None
         self.hilo = None
         self.desde_proyecto = False
-        central = QWidget()
+        central = tema.Fondo()
         self.setCentralWidget(central)
         lay = QVBoxLayout(central)
+        lay.setContentsMargins(28, 18, 28, 18)
+        lay.setSpacing(14)
 
+        # cabecera: nombre, qué es y si está trabajando
+        cab = QHBoxLayout()
+        cab.addWidget(QLabel(tema.marca_html()))
+        cab.addSpacing(16)
+        cab.addWidget(tema.ceja("[ fútbol ]  fotos de equipo a productos"), 0, Qt.AlignVCenter)
+        cab.addStretch()
+        b_abrir = rol(QPushButton("Abrir proyecto…"), "enlace")
+        b_abrir.clicked.connect(self.abrir_proyecto)
+        b_plantillas = QPushButton("Plantillas…")
+        b_plantillas.setToolTip("Actualizar una plantilla con el archivo de un año nuevo o cambiar su encuadre")
+        b_plantillas.clicked.connect(self.dialogo_plantillas)
+        self.pastilla = rol(QLabel(), "estado")
+        for w in (b_abrir, b_plantillas, self.pastilla):
+            cab.addWidget(w, 0, Qt.AlignVCenter)
+        lay.addLayout(cab)
+
+        # 01 fotos y 02 club
         fila = QHBoxLayout()
-        self.zona = ZonaArrastre("Arrastra aquí la carpeta de fotos ARREGLADAS\n(o haz clic para elegirla)")
+        fila.setSpacing(14)
+        t1, v1 = tema.tarjeta("Fotos del equipo", 1)
+        zonas = QHBoxLayout()
+        zonas.setSpacing(12)
+        self.zona = ZonaArrastre("Carpeta ARREGLADAS", "Arrástrala aquí o haz clic para elegirla")
         self.zona.soltada.connect(self.cargar_fotos)
-        self.zona_rec = ZonaArrastre("Solo para CARTAS: arrastra la carpeta RECORTADAS\n(PNG sin fondo, mismo nombre que la foto)")
+        self.zona_rec = ZonaArrastre("Carpeta RECORTADAS", "Solo para cartas · PNG sin fondo")
         self.zona_rec.soltada.connect(self.cargar_recortes)
-        fila.addWidget(self.zona, 2)
-        fila.addWidget(self.zona_rec, 1)
+        zonas.addWidget(self.zona, 3)
+        zonas.addWidget(self.zona_rec, 2)
+        v1.addLayout(zonas)
+        self.info = rol(QLabel("Todavía no hay ningún equipo cargado."), "suave")
+        v1.addWidget(self.info)
+        fila.addWidget(t1, 3)
+
+        # escudo y nombre del club: cambian en 15 x 20, calendarios e imanes
+        t2, v2 = tema.tarjeta("Club", 2)
+        f_escudo = QHBoxLayout()
+        self.vista_escudo = QLabel()
+        self.vista_escudo.setFixedSize(52, 52)
+        self.vista_escudo.setAlignment(Qt.AlignCenter)
+        self.vista_escudo.setStyleSheet(f"background:rgba(255,255,255,0.04);border:1px solid {tema.BORDE};"
+                                        "border-radius:14px")
+        self.combo_escudo = QComboBox()
+        self.combo_escudo.setMinimumWidth(200)
+        b_logos = rol(QPushButton("＋ Añadir logos"), "enlace")
+        b_logos.setToolTip("Elige una carpeta con los escudos de los clubs: el nombre de cada archivo es el del club.")
+        b_logos.clicked.connect(self.anadir_logos)
+        col = QVBoxLayout()
+        col.setSpacing(4)
+        col.addWidget(self.combo_escudo)
+        col.addWidget(b_logos, 0, Qt.AlignLeft)
+        f_escudo.addWidget(self.vista_escudo, 0, Qt.AlignTop)
+        f_escudo.addLayout(col, 1)
+        v2.addLayout(f_escudo)
+        self.txt_club = QLineEdit()
+        self.txt_club.setPlaceholderText("C.F. AMPOSTA")
+        self.txt_club.setToolTip("Nombre del club en la franja de los imanes")
+        self.txt_temporada = QLineEdit(club.temporada_actual())
+        self.txt_temporada.setFixedWidth(76)
+        f_texto = QGridLayout()
+        f_texto.setHorizontalSpacing(10)
+        f_texto.setVerticalSpacing(4)
+        f_texto.addWidget(rol(QLabel("Nombre en imanes"), "suave"), 0, 0)
+        f_texto.addWidget(rol(QLabel("Temporada"), "suave"), 0, 1)
+        f_texto.addWidget(self.txt_club, 1, 0)
+        f_texto.addWidget(self.txt_temporada, 1, 1)
+        v2.addLayout(f_texto)
+        fila.addWidget(t2, 2)
         lay.addLayout(fila)
+        self.pintar_logos(self.ajustes_app.value("escudo", ""))
+        self.combo_escudo.currentIndexChanged.connect(self.escudo_cambiado)
 
-        self.info = QLabel("")
-        self.info.setStyleSheet("font-size:14px")
-        lay.addWidget(self.info)
-
+        # 03 productos
+        t3, v3 = tema.tarjeta("¿Qué quieres hacer?", 3)
         prod = QHBoxLayout()
-        prod.addWidget(QLabel("<b>¿Qué quiere hacer?</b>"))
+        prod.setSpacing(8)
         self.casillas = {}
         for p in productos.lista_plantillas():
-            c = QCheckBox(p["nombre"])
+            c = rol(QCheckBox(p["nombre"].capitalize()), "pastilla")
+            c.setCursor(Qt.PointingHandCursor)
             c.setChecked(True)
             c.toggled.connect(self.productos_cambiados)
             self.casillas[p["id"]] = c
             prod.addWidget(c)
         prod.addStretch()
-        lay.addLayout(prod)
+        v3.addLayout(prod)
+        lay.addWidget(t3)
 
-        # escudo y nombre del club: cambian en 15 x 20, calendarios e imanes
-        marca = QHBoxLayout()
-        marca.addWidget(QLabel("<b>Escudo del club:</b>"))
-        self.combo_escudo = QComboBox()
-        self.combo_escudo.setMinimumWidth(240)
-        self.vista_escudo = QLabel()
-        self.vista_escudo.setFixedSize(44, 44)
-        self.vista_escudo.setAlignment(Qt.AlignCenter)
-        b_logos = QPushButton("Añadir logos…")
-        b_logos.setToolTip("Elige una carpeta con los escudos de los clubs: el nombre de cada archivo es el del club.")
-        b_logos.clicked.connect(self.anadir_logos)
-        self.txt_club = QLineEdit()
-        self.txt_club.setPlaceholderText("C.F. AMPOSTA")
-        self.txt_club.setMinimumWidth(200)
-        self.txt_club.setToolTip("Nombre del club en la franja de los imanes")
-        self.txt_temporada = QLineEdit(club.temporada_actual())
-        self.txt_temporada.setFixedWidth(60)
-        b_plantillas = QPushButton("Plantillas…")
-        b_plantillas.setToolTip("Actualizar una plantilla con el archivo de un año nuevo")
-        b_plantillas.clicked.connect(self.dialogo_plantillas)
-        for w in (self.combo_escudo, self.vista_escudo, b_logos, QLabel("  Nombre en imanes:"), self.txt_club,
-                  QLabel("Temporada:"), self.txt_temporada):
-            marca.addWidget(w)
-        marca.addStretch()
-        marca.addWidget(b_plantillas)
-        lay.addLayout(marca)
-        self.pintar_logos(self.ajustes_app.value("escudo", ""))
-        self.combo_escudo.currentIndexChanged.connect(self.escudo_cambiado)
-
-        sal = QHBoxLayout()
-        self.lbl_salida = QLabel()
-        b = QPushButton("Cambiar carpeta de resultados…")
-        b.clicked.connect(self.elegir_salida)
-        sal.addWidget(self.lbl_salida, 1)
-        sal.addWidget(b)
-        lay.addLayout(sal)
-
+        # 04 jugadores y revisión automática
+        t4, v4 = tema.tarjeta("Jugadores", 4)
         self.rejilla = QWidget()
         self.rejilla_lay = QGridLayout(self.rejilla)
+        self.rejilla_lay.setSpacing(12)
+        self.rejilla_lay.setContentsMargins(0, 0, 0, 0)
+        self.rejilla_lay.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         sc = QScrollArea()
         sc.setWidgetResizable(True)
         sc.setWidget(self.rejilla)
-        lay.addWidget(sc, 1)
-
+        v4.addWidget(sc, 1)
         self.lbl_rev = QLabel("")
-        self.lbl_rev.setStyleSheet("font-size:14px")
-        lay.addWidget(self.lbl_rev)
+        v4.addWidget(self.lbl_rev)
         self.lista_avisos = QListWidget()
         self.lista_avisos.setMaximumHeight(120)
         self.lista_avisos.itemDoubleClicked.connect(self.abrir_aviso)
         self.lista_avisos.hide()
-        lay.addWidget(self.lista_avisos)
+        v4.addWidget(self.lista_avisos)
+        lay.addWidget(t4, 1)
 
+        # abajo: dónde se guarda, cómo va y los botones
         abajo = QHBoxLayout()
+        abajo.setSpacing(10)
+        self.lbl_salida = rol(QLabel(), "suave")
+        b = rol(QPushButton("Cambiar"), "enlace")
+        b.clicked.connect(self.elegir_salida)
+        self.b_registro = rol(QPushButton("Registro"), "enlace")
+        self.b_registro.setCheckable(True)
+        self.estado = rol(QLabel(""), "suave")
         self.barra = QProgressBar()
         self.barra.setRange(0, 0)
+        self.barra.setTextVisible(False)
+        self.barra.setFixedWidth(160)
         self.barra.hide()
-        self.estado = QLabel("")
         self.b_revisar = QPushButton("Revisión rápida de encuadres")
         self.b_revisar.clicked.connect(self.revisar)
-        self.b_generar = QPushButton("Generar")
-        self.b_generar.setStyleSheet("font-size:15px;font-weight:bold;padding:8px 24px;background:#1d7f5a;color:white")
+        self.b_generar = rol(QPushButton("Generar  →"), "primario")
         self.b_generar.clicked.connect(self.generar)
-        b_abrir = QPushButton("Abrir proyecto…")
-        b_abrir.clicked.connect(self.abrir_proyecto)
-        for w in (b_abrir, self.estado):
+        for w in (self.lbl_salida, b, self.b_registro):
             abajo.addWidget(w)
-        abajo.addWidget(self.barra, 1)
-        abajo.addWidget(self.b_revisar)
-        abajo.addWidget(self.b_generar)
+        abajo.addStretch(1)
+        for w in (self.estado, self.barra, self.b_revisar, self.b_generar):
+            abajo.addWidget(w)
         lay.addLayout(abajo)
         self.registro = QPlainTextEdit()
         self.registro.setReadOnly(True)
         self.registro.setMaximumHeight(110)
+        self.registro.hide()
+        self.b_registro.toggled.connect(self.registro.setVisible)
         lay.addWidget(self.registro)
         self.activar(False)
         self.actualizar_salida()
@@ -560,7 +625,9 @@ class Ventana(QMainWindow):
             self.vista_escudo.setPixmap(a_pixmap(club.ajustado(ruta, (88, 88))).scaled(
                 44, 44, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
-            self.vista_escudo.clear()
+            ruta = os.path.join(productos.PLANTILLAS, "15x20", "logo.png")
+            self.vista_escudo.setPixmap(a_pixmap(club.ajustado(ruta, (88, 88))).scaled(
+                40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
     def escudo_cambiado(self):
         ruta = self.combo_escudo.currentData()
@@ -598,21 +665,27 @@ class Ventana(QMainWindow):
     def dialogo_plantillas(self):
         d = QDialog(self)
         d.setWindowTitle("Plantillas")
+        d.setMinimumWidth(760)
         v = QVBoxLayout(d)
-        v.addWidget(QLabel("Para poner la plantilla de un año nuevo, elige su archivo original.\n"
+        v.setContentsMargins(24, 20, 24, 20)
+        v.setSpacing(12)
+        v.addWidget(tema.ceja("[ plantillas ]  de cada año"))
+        v.addWidget(rol(QLabel("Plantillas"), "titulo"))
+        v.addWidget(rol(QLabel("Para poner la plantilla de un año nuevo, elige su archivo original.\n"
                            "El programa la convierte, la prueba y, si sale bien, la usa a partir de ahora.\n"
-                           "«Encuadre…» cambia cómo sale el jugador (más cerca, más lejos, más arriba...)."))
+                           "«Encuadre…» cambia cómo sale el jugador (más cerca, más lejos, más arriba...)."), "suave"))
         elegido = {}
         filas = list(actualizar.ACTUALIZABLES.items()) + [("llaveros", ("Llaveros", None, ""))]
         for id_, (nombre, filtro, ayuda) in filas:
             fila = QHBoxLayout()
-            etiqueta = QLabel(f"<b>{nombre}</b><br><small>{actualizar.info(id_)}</small>")
+            etiqueta = QLabel(f"<b>{nombre}</b><br><span style='color:{tema.SUAVE};font-size:12px'>"
+                              f"{actualizar.info(id_)}</span>")
             etiqueta.setToolTip(ayuda)
-            b = QPushButton("Actualizar…")
+            b = rol(QPushButton("Actualizar…"), "blanco")
             b.setToolTip(ayuda)
             b.setVisible(filtro is not None)
             e = QPushButton("Encuadre…")
-            o = QPushButton("Volver a la original")
+            o = rol(QPushButton("Volver a la original"), "enlace")
             o.setEnabled(actualizar.propia(id_))
 
             def encuadrar(_=False, id_=id_):
@@ -642,7 +715,7 @@ class Ventana(QMainWindow):
             fila.addWidget(e)
             fila.addWidget(b)
             v.addLayout(fila)
-        v.addWidget(QLabel("<small>Cartas todavía no se puede actualizar desde aquí.</small>"))
+        v.addWidget(rol(QLabel("Cartas todavía no se puede actualizar desde aquí."), "suave"))
         cerrar = QPushButton("Cerrar")
         cerrar.clicked.connect(d.reject)
         v.addWidget(cerrar, 0, Qt.AlignRight)
@@ -670,6 +743,7 @@ class Ventana(QMainWindow):
         self.b_revisar.setEnabled(si)
         # mientras trabaja en segundo plano no se puede tocar nada que el motor esté leyendo
         ocupado = self.hilo is not None and self.hilo.isRunning()
+        self.pastilla.setText(tema.punto(tema.CIAN) + "  TRABAJANDO" if ocupado else tema.punto(tema.VERDE) + "  LISTO")
         for w in (self.rejilla, self.lista_avisos, self.zona, self.zona_rec, *self.casillas.values(),
                   self.combo_escudo, self.txt_club, self.txt_temporada):
             w.setEnabled(not ocupado)
@@ -685,7 +759,9 @@ class Ventana(QMainWindow):
 
     def actualizar_salida(self):
         s = self.carpeta_salida()
-        self.lbl_salida.setText(f"Resultados en: <b>{s or '(junto a la carpeta de fotos)'}</b>")
+        self.lbl_salida.setText(f"Resultados en  <span style='color:{tema.TEXTO}'>"
+                                f"{corta(s) if s else 'la carpeta de al lado de las fotos'}</span>")
+        self.lbl_salida.setToolTip(s or "")
 
     def carpeta_salida(self):
         if self.trabajo:
@@ -715,12 +791,12 @@ class Ventana(QMainWindow):
         self.desde_proyecto = False
         if self.zona_rec.property("ruta"):
             self.trabajo.carpeta_recortes = self.zona_rec.property("ruta")
-        self.zona.setText(f"Fotos: {carpeta}\nEquipo: {equipo}")
+        self.zona.mostrar(equipo.strip(), carpeta, hecho=True)
         self.analizar()
 
     def cargar_recortes(self, carpeta):
         self.zona_rec.setProperty("ruta", carpeta)
-        self.zona_rec.setText(f"Recortadas: {carpeta}")
+        self.zona_rec.mostrar("Recortadas", carpeta, hecho=True)
         if self.trabajo:
             self.trabajo.carpeta_recortes = carpeta
             self.analizar()
@@ -735,7 +811,7 @@ class Ventana(QMainWindow):
         self.trabajo = t
         self.desde_proyecto = True
         self.marca_de_trabajo(t)
-        self.zona.setText(f"Fotos: {t.carpeta_fotos}\nEquipo: {t.equipo}")
+        self.zona.mostrar(t.equipo, t.carpeta_fotos, hecho=True)
         for id_, c in self.casillas.items():
             c.setChecked(id_ in t.productos)
         self.analizado(t)
@@ -771,8 +847,9 @@ class Ventana(QMainWindow):
             self.lista_avisos.addItem(it)
         self.lista_avisos.setVisible(bool(mirar))
         texto = f"<b>Revisión automática:</b> {len(corregidos)} correcciones hechas solas"
-        texto += (f", <span style='color:#b35c00'><b>{len(mirar)} cosas para mirar</b></span> "
-                  "(doble clic para verlas)." if mirar else ", <span style='color:#1d7f5a'><b>todo correcto</b></span>.")
+        texto += (f", <span style='color:{tema.AMBAR}'><b>{len(mirar)} cosas para mirar</b></span> "
+                  "(doble clic para verlas)." if mirar
+                  else f", <span style='color:{tema.VERDE}'><b>todo correcto</b></span>.")
         self.lbl_rev.setText(texto)
         self.lbl_rev.setToolTip("\n".join(f"{a.foto}: {a.texto}" for a in corregidos))
 
@@ -833,13 +910,15 @@ class Ventana(QMainWindow):
     def pintar_info(self):
         t = self.trabajo
         n = {k: sum(1 for j in t.jugadores if j.tipo == k) for k in TIPOS}
-        self.info.setText(f"<b>{t.equipo}</b>: {n['jugador']} jugadores, {n['entrenador']} entrenadores, "
-                          f"{n['equipo']} foto de equipo.")
+        self.info.setText(f"<span style='color:{tema.TEXTO};font-weight:700'>{t.equipo}</span>  ·  "
+                          f"{n['jugador']} jugadores  ·  {n['entrenador']} entrenadores  ·  "
+                          f"{n['equipo']} foto de equipo")
 
     def cambiar_tipo(self, j, combo):
         j.tipo = combo.currentData()
         j.tipo_manual = True
-        combo.setStyleSheet("")
+        combo.setProperty("duda", False)
+        tema.repintar(combo)
         self.trabajo.avisos = [a for a in self.trabajo.avisos
                                if not (a.foto == j.id and a.revisor == "clasificacion")]
         self.tras_revision()
@@ -851,13 +930,18 @@ class Ventana(QMainWindow):
                 w.deleteLater()
         for i, j in enumerate(self.trabajo.jugadores):
             caja = QFrame()
-            caja.setFrameShape(QFrame.StyledPanel)
+            caja.setObjectName("jugador")
+            caja.setFixedWidth(150)
+            caja.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             v = QVBoxLayout(caja)
+            v.setContentsMargins(10, 10, 10, 10)
+            v.setSpacing(6)
             img = QLabel()
             mini = miniatura(j.ruta, 400).copy()
-            mini.thumbnail((150, 200))
+            mini.thumbnail((128, 150))
             img.setPixmap(a_pixmap(mini))
             img.setAlignment(Qt.AlignCenter)
+            img.setFixedHeight(150)
             v.addWidget(img)
             cb = QCheckBox(j.nombre)
             cb.setChecked(j.incluido)
@@ -868,15 +952,15 @@ class Ventana(QMainWindow):
                 tipo.addItem(txt, k)
             tipo.setCurrentIndex(list(TIPOS).index(j.tipo))
             if not j.tipo_seguro and not j.tipo_manual:
-                tipo.setStyleSheet("QComboBox{background:#ffe8b0}")
+                tipo.setProperty("duda", True)
                 tipo.setToolTip("No está claro: compruébalo")
             tipo.currentIndexChanged.connect(lambda _, j=j, w=tipo: self.cambiar_tipo(j, w))
             v.addWidget(tipo)
             if j.giro_auto and not j.sin_giro_auto:
-                v.addWidget(QLabel(f"↻ llavero {j.giro_auto:+.1f}°".replace(".", ",")))
+                v.addWidget(rol(QLabel(f"↻ llavero {j.giro_auto:+.1f}°".replace(".", ",")), "suave"))
             if j.ruta_recorte:
-                v.addWidget(QLabel("✓ recorte"))
-            self.rejilla_lay.addWidget(caja, i // 6, i % 6)
+                v.addWidget(rol(QLabel("✓ recorte"), "suave"))
+            self.rejilla_lay.addWidget(caja, i // 7, i % 7)
 
     # --- revisión y generación ---------------------------------------------
     def productos_elegidos(self):
@@ -978,6 +1062,7 @@ class Ventana(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    tema.aplicar(app)
     v = Ventana()
     v.show()
     sys.exit(app.exec())

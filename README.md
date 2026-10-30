@@ -106,6 +106,9 @@ modelos de silueta, cara y cuerpo), sin Python ni descargas en el ordenador del 
 Las letras de los imanes (nombre del equipo, del club y temporada) son Source Sans 3 (libre,
 OFL, en `recursos/fuentes`): la original es Myriad Pro, de Adobe, y no se puede repartir.
 
+La ventana usa Inter Tight, Instrument Serif y JetBrains Mono (también OFL, en
+`recursos/fuentes`), con el estilo de la web de ABR studio (`publifoto/tema.py`).
+
 ## Pendiente
 
 - Editable del calendario de sobremesa en IDML; ahora es un PDF por capas.
