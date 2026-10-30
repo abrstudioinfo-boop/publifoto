@@ -12,6 +12,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# macOS más antiguo en el que tiene que abrir el programa (lo limita mediapipe: 13.0)
+MACOS_MINIMO="${MACOS_MINIMO:-13.0}"
+export MACOSX_DEPLOYMENT_TARGET="$MACOS_MINIMO"
 PY="${PYTHON:-python3.12}"
 if ! command -v "$PY" >/dev/null; then
     echo "Falta Python 3.12: instálalo desde https://www.python.org/downloads/macos/"; exit 1
@@ -21,7 +24,12 @@ echo "== 1/5 Librerías"
 "$PY" -m venv .venv-mac
 source .venv-mac/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt "pyinstaller==6.*"
+# solo ruedas hechas para macOS $MACOS_MINIMO o anterior (requirements.txt es para Windows:
+# con sus versiones el programa se cierra al abrirlo en un Mac anterior a macOS 26)
+rm -rf .ruedas-mac
+python -m pip download --only-binary=:all: --platform "macosx_${MACOS_MINIMO/./_}_$(uname -m)" \
+    --python-version 3.12 --implementation cp --abi cp312 -d .ruedas-mac -r empaquetar/requisitos_mac.txt
+python -m pip install --no-index --find-links .ruedas-mac -r empaquetar/requisitos_mac.txt
 
 echo "== 2/5 Modelos dentro del programa"
 mkdir -p publifoto/recursos/modelos
@@ -36,6 +44,8 @@ rm -rf build dist
 pyinstaller --noconfirm --clean --distpath dist --workpath build empaquetar/publifoto.spec
 
 echo "== 4/5 Prueba del programa montado"
+# ningún binario puede pedir un macOS más nuevo que el mínimo
+python empaquetar/macos_minimo.py dist/Publifoto.app "$MACOS_MINIMO"
 dist/Publifoto.app/Contents/MacOS/Publifoto --comprobar
 # todos los productos con fotos de mentira dibujadas por el programa (ninguna foto real)
 PRUEBA_DIR="$(mktemp -d)"

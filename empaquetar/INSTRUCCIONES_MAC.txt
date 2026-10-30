@@ -4,6 +4,10 @@ PUBLIFOTO PARA MAC - CÓMO MONTARLO Y ENTREGARLO
 Lo monta una vez alguien con un Mac (mejor con chip Apple M1 o posterior).
 Al cliente solo se le entrega el archivo Publifoto.dmg que sale al final.
 
+El programa funciona desde macOS 13 (Ventura): Mac Intel de 2017 en adelante y todos los
+de chip Apple. En macOS 12 o anterior no abre (la librería de caras y cuerpos, mediapipe,
+no existe para esos macOS). Se comprueba al montar: empaquetar/macos_minimo.py.
+
 1. Instalar Python 3.12 (solo en el Mac donde se monta, el cliente no lo necesita):
    https://www.python.org/downloads/macos/  ->  "macOS 64-bit universal2 installer" de la 3.12
 

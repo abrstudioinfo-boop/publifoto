@@ -23,9 +23,12 @@ def comprobar():
     plantillas = productos.lista_plantillas()
     paso(f"plantillas ({len(plantillas)})", lambda: None if len(plantillas) == 6 else
          (_ for _ in ()).throw(RuntimeError("deberían ser 6")))
+    letras = {}
     for p in plantillas:
         for t in p.get("textos", []):
-            paso(f"letra {t['fuente']} ({p['id']})", lambda t=t: productos.ruta_fuente(t["fuente"]))
+            letras.setdefault(t["fuente"], p["id"])
+    for fuente, id_ in letras.items():
+        paso(f"letra {fuente} ({id_})", lambda f=fuente: productos.ruta_fuente(f))
     paso("perfil FOGRA39", lambda: color.a_cmyk(Image.new("RGB", (8, 8), (200, 30, 30))))
     gris = np.full((640, 480, 3), 128, np.uint8)
     paso("modelo de silueta (rembg)", lambda: analisis._rembg())

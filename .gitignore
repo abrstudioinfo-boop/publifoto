@@ -17,3 +17,4 @@ dist/
 .venv*/
 __pycache__/
 *.pyc
+.ruedas-mac/

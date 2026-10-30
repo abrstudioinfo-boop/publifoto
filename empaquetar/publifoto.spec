@@ -48,7 +48,7 @@ if sys.platform == "darwin":
             "CFBundleShortVersionString": "0.2.0",
             "CFBundleVersion": "0.2.0",
             "NSHighResolutionCapable": True,
-            "LSMinimumSystemVersion": "11.0",
+            "LSMinimumSystemVersion": "13.0",   # mediapipe no funciona en macOS anteriores
             "NSDocumentsFolderUsageDescription": "Publifoto abre las fotos del equipo y guarda los productos.",
             "NSDesktopFolderUsageDescription": "Publifoto abre las fotos del equipo y guarda los productos.",
             "NSDownloadsFolderUsageDescription": "Publifoto abre las fotos del equipo y guarda los productos.",

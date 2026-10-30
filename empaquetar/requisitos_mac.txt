@@ -1,0 +1,26 @@
+# Librerías del programa montado para Mac: las más nuevas que funcionan desde macOS 13
+# (Ventura). Las de requirements.txt (Windows) piden macOS más nuevos: PySide6 6.12 lleva
+# binarios para macOS 26 y se cierra nada más arrancar en un Mac anterior.
+# Se ha mirado dentro de cada binario (no basta la etiqueta de la rueda, que a veces
+# miente): el mínimo de verdad lo marca mediapipe 0.10.14 (macOS 13.0); el resto, 13 o menos.
+# construir_mac.sh las baja solo en versiones para macOS 13 y empaquetar/macos_minimo.py
+# comprueba después todo el programa montado.
+PySide6==6.9.3                     # 6.10 y 6.11 llevan binarios para macOS 15, 6.12 para macOS 26
+onnxruntime==1.19.2                # 1.20 a 1.23 piden macOS 13.3 o 13.4
+mediapipe==0.10.14                 # macOS 13.0: el límite
+Pillow==12.3.0
+PyMuPDF==1.28.2
+psd-tools==1.26.0
+rembg==2.0.85
+tifffile==2026.9.20
+pyinstaller==6.22.3
+# chip Apple
+numpy==2.5.3; platform_machine == "arm64"
+opencv-contrib-python==5.0.0.93; platform_machine == "arm64"
+opencv-python-headless==5.0.0.93; platform_machine == "arm64"
+# Intel: numba 0.62 (la última para Intel) pide numpy < 2.4; OpenCV 5 pide macOS 14
+numpy==2.3.5; platform_machine == "x86_64"
+opencv-contrib-python==4.11.0.86; platform_machine == "x86_64"
+opencv-python-headless==4.11.0.86; platform_machine == "x86_64"
+numba==0.62.1; platform_machine == "x86_64"
+llvmlite==0.45.1; platform_machine == "x86_64"
