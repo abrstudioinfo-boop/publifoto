@@ -93,9 +93,9 @@ class ZonaArrastre(QLabel):
     def _estilo(self, activo):
         self.setStyleSheet(
             "QLabel{border:1.5px dashed %s;border-radius:16px;padding:14px;background:%s}"
-            "QLabel:hover{border-color:rgba(61,91,255,0.8)}"
-            % (("rgba(61,91,255,0.95)", "rgba(31,59,255,0.14)") if activo
-               else ("rgba(120,150,255,0.30)", "rgba(255,255,255,0.02)")))
+            "QLabel:hover{border-color:rgba(255,40,150,0.8)}"
+            % (("rgba(255,40,150,0.95)", "rgba(230,0,127,0.14)") if activo
+               else ("rgba(255,120,190,0.30)", "rgba(255,255,255,0.02)")))
 
     def dragEnterEvent(self, e):
         if e.mimeData().hasUrls():
@@ -469,7 +469,7 @@ class Ventana(QMainWindow):
 
         # cabecera: nombre, qué es y si está trabajando
         cab = QHBoxLayout()
-        cab.addWidget(QLabel(tema.marca_html()))
+        cab.addWidget(tema.logo())
         cab.addSpacing(16)
         cab.addWidget(tema.ceja("[ fútbol ]  fotos de equipo a productos"), 0, Qt.AlignVCenter)
         cab.addStretch()
@@ -743,7 +743,7 @@ class Ventana(QMainWindow):
         self.b_revisar.setEnabled(si)
         # mientras trabaja en segundo plano no se puede tocar nada que el motor esté leyendo
         ocupado = self.hilo is not None and self.hilo.isRunning()
-        self.pastilla.setText(tema.punto(tema.CIAN) + "  TRABAJANDO" if ocupado else tema.punto(tema.VERDE) + "  LISTO")
+        self.pastilla.setText(tema.punto(tema.ROSA_CLARO) + "  TRABAJANDO" if ocupado else tema.punto(tema.VERDE) + "  LISTO")
         for w in (self.rejilla, self.lista_avisos, self.zona, self.zona_rec, *self.casillas.values(),
                   self.combo_escudo, self.txt_club, self.txt_temporada):
             w.setEnabled(not ocupado)
