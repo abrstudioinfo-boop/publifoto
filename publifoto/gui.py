@@ -387,6 +387,9 @@ class EncuadrePlantilla(QDialog):
         capas = []
         if "lienzo" not in self.p:
             return capas
+        if self.p["tipo"] == "carta":
+            # logo, textos y separadores de la carta, encima del jugador
+            return [(Image.open(os.path.join(self.p["_carpeta"], self.p["encima"])).convert("RGBA"), 0, 0)]
         from . import color
         for _, im, alfa, x, y in productos._encima(self.p, marca):
             if im.mode == "CMYK":
@@ -715,7 +718,6 @@ class Ventana(QMainWindow):
             fila.addWidget(e)
             fila.addWidget(b)
             v.addLayout(fila)
-        v.addWidget(rol(QLabel("Cartas todavía no se puede actualizar desde aquí."), "suave"))
         cerrar = QPushButton("Cerrar")
         cerrar.clicked.connect(d.reject)
         v.addWidget(cerrar, 0, Qt.AlignRight)

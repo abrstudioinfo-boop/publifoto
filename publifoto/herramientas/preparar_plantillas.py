@@ -418,6 +418,9 @@ def preparar(id_, origen, carpeta=None):
         return foto_con_logo(origen, carpeta=carpeta, **PARED)
     if id_ == "15x20":
         return foto_con_logo(origen, carpeta=carpeta, **FOTO_15X20)
+    if id_ == "cartas":
+        from .preparar_carta import main as carta
+        return carta(origen, carpeta)
     raise ValueError(f"La plantilla {id_} no se puede actualizar desde un archivo.")
 
 

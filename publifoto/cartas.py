@@ -16,16 +16,19 @@ _cache = {}
 
 
 def _plantilla_px(p):
-    if p["id"] not in _cache:
-        c = p["_carpeta"]
-        _cache[p["id"]] = dict(
+    # por carpeta y fecha: al actualizar la plantilla se vuelve a leer
+    c = p["_carpeta"]
+    clave = (c, os.path.getmtime(os.path.join(c, p["fondo"])))
+    if clave not in _cache:
+        _cache.clear()
+        _cache[clave] = dict(
             fondo=np.asarray(Image.open(os.path.join(c, p["fondo"])).convert("RGB"), np.float32),
             debajo=np.asarray(Image.open(os.path.join(c, p["debajo"])).convert("RGB"), np.float32),
             mascara=np.asarray(Image.open(os.path.join(c, p["mascara"])), np.float32) / 255,
             encima=np.asarray(Image.open(os.path.join(c, p["encima"])), np.float32),
             lut=np.load(os.path.join(c, p["lut"])),
         )
-    return _cache[p["id"]]
+    return _cache[clave]
 
 
 def componer(p, jugador, ajuste=None):

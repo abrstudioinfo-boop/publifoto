@@ -11,7 +11,7 @@ import tempfile
 
 from . import productos
 
-# qué archivo pide cada plantilla (cartas aún no se actualiza desde aquí)
+# qué archivo pide cada plantilla
 ACTUALIZABLES = {
     "sobremesa": ("Calendario de sobremesa", "PDF exportado de InDesign (*.pdf)",
                   "El PDF del calendario con las fotos de ejemplo. El .indd no se puede leer sin "
@@ -22,6 +22,9 @@ ACTUALIZABLES = {
               "El TIFF de Photoshop con capas: fotos de ejemplo y la capa del escudo."),
     "15x20": ("15 x 20 con logo", "TIFF con capas (*.tif *.tiff)",
               "El TIFF de Photoshop con capas: foto de ejemplo y la capa del escudo."),
+    "cartas": ("Cartas", "TIFF con capas (*.tif *.tiff)",
+               "El TIFF de Photoshop de la carta con los colores del equipo, con sus capas y un jugador "
+               "de ejemplo en «Place Your Image Here». Es un archivo grande: tarda un par de minutos."),
 }
 
 
@@ -63,6 +66,8 @@ def guardar_encuadre(id_, enc):
 
 
 def _resumen(p):
+    if p["tipo"] == "carta":
+        return f"carta de {p['lienzo'][0]} x {p['lienzo'][1]} px"
     if "marcos" in p:
         return f"{len(p['marcos'])} marcos para fotos, archivo «{p['archivo']}»"
     if p.get("huecos") and p["tipo"] == "pdf":

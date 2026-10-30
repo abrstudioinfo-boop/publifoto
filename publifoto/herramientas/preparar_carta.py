@@ -95,10 +95,15 @@ def aplicar_lut(rgb, lut):
     return out
 
 
-def main(ruta_tif, id_="cartas"):
+def main(ruta_tif, carpeta=None, id_="cartas"):
+    """ruta_tif: el TIFF de la carta con capas y un jugador de ejemplo; carpeta: dónde
+    se guarda la plantilla (por defecto, dentro del programa). Sirve para cualquier
+    carta hecha con el mismo diseño (otros colores, otro club, otro año)."""
     (W, H), modo, capas = leer_capas(ruta_tif)
     vis = visibilidad(capas)
-    k = next(i for i, c in enumerate(capas) if c["nombre"] == HUECO)
+    k = next((i for i, c in enumerate(capas) if c["nombre"] == HUECO), None)
+    if k is None:
+        raise ValueError(f"No se encuentra la capa de la foto («{HUECO}») en la carta.")
     hueco = capas[k]
     final = tifffile.imread(ruta_tif)[:, :, :3].astype(np.float32)
 
@@ -176,7 +181,7 @@ def main(ruta_tif, id_="cartas"):
     ea = encima[:, :, 3:4]
     sin = np.where(rehacer[..., None], encima[:, :, :3] * ea + sin * (1 - ea), sin)
 
-    carpeta = os.path.join(DESTINO, id_)
+    carpeta = carpeta or os.path.join(DESTINO, id_)
     os.makedirs(carpeta, exist_ok=True)
     Image.fromarray(np.clip(sin, 0, 255).astype(np.uint8)).save(os.path.join(carpeta, "fondo.png"))
     Image.fromarray(np.clip(base, 0, 255).astype(np.uint8)).save(os.path.join(carpeta, "debajo.png"))
@@ -185,7 +190,7 @@ def main(ruta_tif, id_="cartas"):
                     "RGBA").save(os.path.join(carpeta, "encima.png"))
     np.save(os.path.join(carpeta, "lut.npy"), lut)
     np.save(os.path.join(carpeta, "sombra.npy"), perfil)
-    _guardar(id_, {
+    _guardar(carpeta, {
         "id": id_, "nombre": "CARTAS", "tipo": "carta", "color": "CMYK", "lienzo": [W, H], "ppp": 300,
         "fondo": "fondo.png", "debajo": "debajo.png", "mascara": "mascara.png", "encima": "encima.png",
         "lut": "lut.npy", "sombra": "sombra.npy", "capas_encima": lista_encima,

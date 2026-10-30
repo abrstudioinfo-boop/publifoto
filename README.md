@@ -45,7 +45,8 @@ el PDF exportado de InDesign; imanes: el .ai; pared y 15 x 20: el TIFF con capas
 lo convierte, lo prueba generando el producto con figuras dibujadas y solo entonces lo usa.
 Se guarda en la carpeta de datos del usuario (`%LOCALAPPDATA%\Publifoto\datos` en Windows,
 `~/Library/Application Support/Publifoto` en Mac), igual que los escudos; «Volver a la
-original» recupera la que viene con el programa. Cartas aún no se actualiza desde aquí.
+original» recupera la que viene con el programa. Cartas: el TIFF con capas de la carta con
+los colores del equipo (mismo diseño, con «Place Your Image Here»); tarda un par de minutos.
 
 ## Revisores automáticos
 
