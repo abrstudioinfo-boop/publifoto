@@ -2,6 +2,7 @@
 import os
 import sys
 import traceback
+from dataclasses import replace
 
 from PIL import Image, ImageOps
 from PySide6.QtCore import QObject, QSettings, Qt, QThread, QUrl, Signal, Slot
@@ -274,6 +275,157 @@ class Revision(QDialog):
         self.mover(0, 0, 1.03 if e.angleDelta().y() > 0 else 1 / 1.03)
 
 
+class EncuadrePlantilla(QDialog):
+    """Encuadre predeterminado de un producto: cuánto ocupa el jugador en el hueco y
+    dónde queda, probado con un jugador de ejemplo (uno del equipo cargado o una
+    figura dibujada). Los ajustes de cada jugador en la revisión rápida van encima."""
+
+    def __init__(self, id_, trabajo=None, marca=None, texto=None, parent=None):
+        super().__init__(parent)
+        self.p = productos.cargar_plantilla(id_)
+        self.setWindowTitle(f"Encuadre de {self.p['nombre']}")
+        self.resize(820, 760)
+        self.enc = dict(self.p["encuadre"])
+        self.inicial = dict(self.enc)
+        self.ejemplos = self._ejemplos(trabajo)
+        self.capas = self._capas(marca)
+        v = QVBoxLayout(self)
+        if texto:
+            t = QLabel(texto)
+            t.setWordWrap(True)
+            v.addWidget(t)
+        v.addWidget(QLabel("<b>¿Cómo quieres que salga el jugador?</b> Lo que guardes aquí es como saldrán "
+                           "todos los jugadores de este producto a partir de ahora."))
+        fila = QHBoxLayout()
+        fila.addWidget(QLabel("Jugador de ejemplo:"))
+        self.combo = QComboBox()
+        for nombre, _, _ in self.ejemplos:
+            self.combo.addItem(nombre)
+        self.combo.currentIndexChanged.connect(lambda _: self.pintar())
+        fila.addWidget(self.combo, 1)
+        v.addLayout(fila)
+        self.vista = QLabel()
+        self.vista.setAlignment(Qt.AlignCenter)
+        self.vista.setMinimumSize(480, 500)
+        self.vista.setStyleSheet("background:#333")
+        v.addWidget(self.vista, 1)
+        botones = QGridLayout()
+        for txt, accion, f, c in [("▲ Jugador más arriba", ("margen", -0.005), 0, 1),
+                                  ("◀ A la izquierda", ("centro", 0.005), 1, 0),
+                                  ("A la derecha ▶", ("centro", -0.005), 1, 2),
+                                  ("▼ Jugador más abajo", ("margen", 0.005), 2, 1),
+                                  ("＋ Más cerca", ("alto_rel", 1 / 1.03), 0, 3),
+                                  ("－ Más lejos", ("alto_rel", 1.03), 2, 3)]:
+            b = QPushButton(txt)
+            b.setAutoRepeat(True)
+            b.clicked.connect(lambda _=False, a=accion: self.mover(*a))
+            botones.addWidget(b, f, c)
+        antes = QPushButton("Como estaba")
+        antes.clicked.connect(self.como_estaba)
+        botones.addWidget(antes, 1, 1)
+        v.addLayout(botones)
+        self.lbl = QLabel()
+        self.lbl.setAlignment(Qt.AlignCenter)
+        v.addWidget(self.lbl)
+        fila = QHBoxLayout()
+        fila.addStretch(1)
+        cancelar = QPushButton("Dejarlo como estaba")
+        cancelar.clicked.connect(self.reject)
+        guardar = QPushButton("Guardar como predeterminado")
+        guardar.setDefault(True)
+        guardar.clicked.connect(self.guardar)
+        fila.addWidget(cancelar)
+        fila.addWidget(guardar)
+        v.addLayout(fila)
+        self.pintar()
+
+    def _ejemplos(self, trabajo):
+        """[(nombre, imagen, puntos)]: los jugadores del equipo cargado que salen en el
+        producto y, siempre, una figura dibujada (sin fotos de nadie)."""
+        from .comprobar import _figura
+        ejemplos = []
+        if trabajo and trabajo.jugadores:
+            for j in motor.jugadores_para(trabajo, self.p):
+                if j.puntos is None:
+                    continue
+                puntos, giro = productos.puntos_y_giro(j, self.p)
+                im = miniatura(j.ruta)
+                f = im.width / j.puntos.ancho
+                puntos = replace(puntos, ancho=im.width, alto=round(puntos.alto * f))
+                ejemplos.append((j.nombre, girar(im, giro), puntos))
+        foto, _, puntos = _figura(0)
+        ejemplos.append(("Figura dibujada", foto, puntos))
+        return ejemplos
+
+    def _capas(self, marca):
+        """El escudo y lo que va encima de la foto (15x20 y pared), para verlo en su sitio."""
+        capas = []
+        if "lienzo" not in self.p:
+            return capas
+        from . import color
+        for _, im, alfa, x, y in productos._encima(self.p, marca):
+            if im.mode == "CMYK":
+                im = color.cmyk_a_rgb(im).convert("RGBA")
+                im.putalpha(alfa)
+            capas.append((im.convert("RGBA"), x, y))
+        return capas
+
+    def mover(self, clave, valor):
+        if clave == "alto_rel":
+            self.enc[clave] = min(30.0, max(1.2, self.enc[clave] * valor))
+        else:
+            self.enc[clave] = min(0.5, max(-0.5 if clave == "centro" else 0.0, self.enc[clave] + valor))
+        self.pintar()
+
+    def como_estaba(self):
+        self.enc = dict(self.inicial)
+        self.pintar()
+
+    def pintar(self):
+        from PIL import ImageDraw
+        _, im, puntos = self.ejemplos[self.combo.currentIndex()]
+        ar = aspecto(self.p)
+        alto = 520
+        tam = (int(alto * ar), alto)
+        caja = encuadre.calcular(puntos, ar, encuadre.Encuadre(**self.enc))
+        vista = encuadre.recortar(im.convert("RGB"), caja, tam).convert("RGBA")
+        hueco = self.p["calendarios"][0]["huecos"][0] if "calendarios" in self.p else self.p["huecos"][0]
+        r = hueco["rect"]
+        esc = tam[0] / (r[2] - r[0])
+        for capa, x, y in self.capas:
+            c = capa.resize((max(1, round(capa.width * esc)), max(1, round(capa.height * esc))), Image.LANCZOS)
+            vista.alpha_composite(c, (round((x - r[0]) * esc), round((y - r[1]) * esc)))
+        if "circulo" in hueco:
+            # fuera del círculo del imán, oscurecido (es lo que se lleva el troquel)
+            c = [(hueco["circulo"][i] - r[i % 2]) * esc for i in range(4)]
+            mascara = Image.new("L", tam, 150)
+            ImageDraw.Draw(mascara).ellipse(c, fill=0)
+            negro = Image.new("L", tam, 0)
+            vista.alpha_composite(Image.merge("RGBA", (negro, negro, negro, mascara)))
+            ImageDraw.Draw(vista).ellipse(c, outline=(255, 255, 255, 255), width=2)
+        self.vista.setPixmap(a_pixmap(vista))
+        cambiado = "" if self.enc == self.inicial else "  (cambiado)"
+        self.lbl.setText(f"Espacio encima de la cabeza: {self.enc['margen'] * 100:.1f} % · "
+                         f"el hueco mide {self.enc['alto_rel']:.2f} cabezas de alto{cambiado}".replace(".", ","))
+
+    def guardar(self):
+        if self.enc != self.inicial:
+            actualizar.guardar_encuadre(self.p["id"], self.enc)
+        self.accept()
+
+    def keyPressEvent(self, e):
+        teclas = {Qt.Key_Up: ("margen", -0.005), Qt.Key_Down: ("margen", 0.005),
+                  Qt.Key_Left: ("centro", 0.005), Qt.Key_Right: ("centro", -0.005),
+                  Qt.Key_Plus: ("alto_rel", 1 / 1.03), Qt.Key_Minus: ("alto_rel", 1.03)}
+        if e.key() in teclas:
+            self.mover(*teclas[e.key()])
+        else:
+            super().keyPressEvent(e)
+
+    def wheelEvent(self, e):
+        self.mover("alto_rel", 1 / 1.03 if e.angleDelta().y() > 0 else 1.03)
+
+
 class Ventana(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -448,16 +600,25 @@ class Ventana(QMainWindow):
         d.setWindowTitle("Plantillas")
         v = QVBoxLayout(d)
         v.addWidget(QLabel("Para poner la plantilla de un año nuevo, elige su archivo original.\n"
-                           "El programa la convierte, la prueba y, si sale bien, la usa a partir de ahora."))
+                           "El programa la convierte, la prueba y, si sale bien, la usa a partir de ahora.\n"
+                           "«Encuadre…» cambia cómo sale el jugador (más cerca, más lejos, más arriba...)."))
         elegido = {}
-        for id_, (nombre, filtro, ayuda) in actualizar.ACTUALIZABLES.items():
+        filas = list(actualizar.ACTUALIZABLES.items()) + [("llaveros", ("Llaveros", None, ""))]
+        for id_, (nombre, filtro, ayuda) in filas:
             fila = QHBoxLayout()
             etiqueta = QLabel(f"<b>{nombre}</b><br><small>{actualizar.info(id_)}</small>")
             etiqueta.setToolTip(ayuda)
             b = QPushButton("Actualizar…")
             b.setToolTip(ayuda)
+            b.setVisible(filtro is not None)
+            e = QPushButton("Encuadre…")
             o = QPushButton("Volver a la original")
-            o.setEnabled(actualizar.info(id_) != "La que viene con el programa")
+            o.setEnabled(actualizar.propia(id_))
+
+            def encuadrar(_=False, id_=id_):
+                if self.dialogo_encuadre(id_):
+                    d.reject()
+                    self.dialogo_plantillas()
 
             def pedir(_=False, id_=id_, filtro=filtro, nombre=nombre):
                 ruta, _f = QFileDialog.getOpenFileName(d, f"Archivo nuevo: {nombre}", "", filtro)
@@ -474,9 +635,11 @@ class Ventana(QMainWindow):
                     self.dialogo_plantillas()
 
             b.clicked.connect(pedir)
+            e.clicked.connect(encuadrar)
             o.clicked.connect(original)
             fila.addWidget(etiqueta, 1)
             fila.addWidget(o)
+            fila.addWidget(e)
             fila.addWidget(b)
             v.addLayout(fila)
         v.addWidget(QLabel("<small>Cartas todavía no se puede actualizar desde aquí.</small>"))
@@ -488,13 +651,18 @@ class Ventana(QMainWindow):
                                   self.plantilla_actualizada)
 
     def plantilla_actualizada(self, r):
-        caja = QMessageBox(self)
-        caja.setWindowTitle("Plantilla actualizada")
-        caja.setText("✓ La plantilla nueva funciona y se usa a partir de ahora.\n\n" + r["resumen"] +
-                     ("\n\n⚠ " + "\n".join(r["avisos"]) if r["avisos"] else ""))
-        if r.get("vista"):
-            caja.setIconPixmap(QPixmap(r["vista"]).scaled(320, 320, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        caja.exec()
+        # al subir una plantilla se pregunta enseguida cómo tiene que salir el jugador
+        self.dialogo_encuadre(r["id"], "✓ La plantilla nueva funciona y se usa a partir de ahora: " + r["resumen"] +
+                              ("<br>⚠ " + "<br>".join(r["avisos"]) if r["avisos"] else ""))
+
+    def dialogo_encuadre(self, id_, texto=None):
+        """Devuelve True si se ha guardado un encuadre nuevo."""
+        marca = {"escudo": self.combo_escudo.currentData()}
+        d = EncuadrePlantilla(id_, self.trabajo, marca, texto, self)
+        if d.exec() != QDialog.Accepted:
+            return False
+        self.productos_cambiados()   # los avisos de encuadre se rehacen con el nuevo
+        return True
 
     # --- carga -------------------------------------------------------------
     def activar(self, si):
