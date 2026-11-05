@@ -62,15 +62,20 @@ def componer(p, jugador, ajuste=None):
     return Image.fromarray(np.clip(carta, 0, 255).astype(np.uint8)), capas
 
 
-def generar(p, jugadores, equipo, ajustes, imp, edi, progreso=print):
-    salidas = []
-    for j in jugadores:
+def generar(p, jugadores, equipo, ajustes, imp, edi, progreso=print, hilos=None):
+    def una(j):
         if not j.ruta_recorte:
             progreso(f"  CARTAS: falta el recorte de {j.nombre}, se salta")
-            continue
+            return []
         progreso(f"  CARTAS: {j.nombre}")
-        carta, capas = componer(p, j, ajustes.get(j.id))
-        nombre = productos.nombre_archivo(p, equipo, foto=j.nombre)
-        salidas.append(productos.guardar_raster(color.a_cmyk(carta), os.path.join(imp, nombre), "tif"))
-        salidas.append(productos.guardar_psd(capas, tuple(p["lienzo"]), "CMYK", os.path.join(edi, nombre)))
-    return salidas
+        return _una(p, j, equipo, ajustes, imp, edi)
+    hechas = hilos.map(una, jugadores) if hilos else map(una, jugadores)
+    return [s for h in hechas for s in h]
+
+
+def _una(p, j, equipo, ajustes, imp, edi):
+    carta, capas = componer(p, j, ajustes.get(j.id))
+    nombre = productos.nombre_archivo(p, equipo, foto=j.nombre)
+    carta_cmyk = color.a_cmyk(carta)
+    return [productos.guardar_raster(carta_cmyk, os.path.join(imp, nombre), "tif"),
+            productos.guardar_psd(capas, tuple(p["lienzo"]), "CMYK", os.path.join(edi, nombre), carta_cmyk)]

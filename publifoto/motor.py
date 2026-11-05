@@ -7,6 +7,8 @@ Estructura de salida:
 """
 import json
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 from . import productos
@@ -184,38 +186,52 @@ def jugadores_para(trabajo, plantilla):
     return [j for j in trabajo.jugadores if j.incluido and j.tipo not in excluir]
 
 
+# MuPDF (los PDF) no admite varios hilos a la vez: los productos PDF van de uno en uno
+_PDF = threading.Lock()
+
+
+def memoria_gb():
+    """Memoria RAM del ordenador (GB), sin librerías extra; 8 si no se sabe."""
+    try:
+        if os.name == "nt":
+            import ctypes
+
+            class Estado(ctypes.Structure):
+                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                            ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                            ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                            ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                            ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+            e = Estado()
+            e.dwLength = ctypes.sizeof(Estado)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(e))
+            return e.ullTotalPhys / 2 ** 30
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2 ** 30
+    except Exception:
+        return 8.0
+
+
+def hilos_disponibles():
+    """Fotos que se preparan a la vez: tantas como núcleos (menos uno), pero cada una
+    ocupa hasta 1 GB de memoria, así que también según la RAM. Máximo 8."""
+    return max(1, min(8, (os.cpu_count() or 2) - 1, int(memoria_gb() // 2)))
+
+
 def generar(trabajo, progreso=print):
-    salidas = []
+    """Genera los productos elegidos. Van a la vez (cada uno en su hilo) y, dentro de
+    cada producto, se preparan varios jugadores a la vez; el resultado es el mismo que
+    haciéndolos de uno en uno."""
     for j in trabajo.jugadores:
         j.retocar = trabajo.retocar_piel
-    for id_ in trabajo.productos:
-        p = productos.cargar_plantilla(id_)
-        progreso(f"Generando {p['nombre']}...")
-        jug = jugadores_para(trabajo, p)
-        if not jug:
-            continue
-        aj = trabajo.ajustes.get(id_, {})
-        base = os.path.join(trabajo.carpeta_equipo, p["nombre"])
-        imp, edi = os.path.join(base, "IMPRESION"), os.path.join(base, "EDITABLE")
-        if id_ == "cartas":
-            from . import cartas
-            salidas += cartas.generar(p, jug, trabajo.equipo, aj, imp, edi, progreso)
-        elif p["tipo"] == "pdf":
-            hs = productos.hojas(p, jug)
-            nombre = productos.nombre_archivo(p, trabajo.equipo)
-            doc = productos.pdf(p, hs, trabajo.equipo, aj, marca=trabajo.marca)
-            if "pdf" in p["impresion"]:
-                salidas.append(productos.guardar_pdf(doc, os.path.join(imp, nombre)))
-            if "jpg" in p["impresion"]:
-                salidas += productos.pdf_a_jpg(doc, os.path.join(imp, nombre))
-            if "tif" in p["impresion"]:
-                salidas += productos.pdf_a_tif(doc, os.path.join(imp, nombre))
-            recortes = os.path.join(edi, "FOTOS") if p.get("guardar_recortes") else None
-            salidas.append(productos.guardar_pdf(productos.pdf(p, hs, trabajo.equipo, aj, capas=True, marca=trabajo.marca,
-                                                               carpeta_recortes=recortes),
-                                                 os.path.join(edi, nombre), p.get("editable", "pdf")))
-        else:
-            salidas += _generar_raster(p, jug, trabajo, aj, imp, edi, progreso)
+    productos.limpiar_cache()
+    n = hilos_disponibles()
+    with ThreadPoolExecutor(max_workers=n, thread_name_prefix="foto") as fotos, \
+            ThreadPoolExecutor(max_workers=len(trabajo.productos) or 1, thread_name_prefix="producto") as prods:
+        # todos empiezan a la vez (las fotos se reparten en 'fotos'); el calendario de pared
+        # primero: es el que más tarda (al final junta a todos en un PSD)
+        orden = sorted(trabajo.productos, key=lambda i: i != "pared")
+        futuros = {id_: prods.submit(_generar_producto, trabajo, id_, progreso, fotos) for id_ in orden}
+        salidas = [s for id_ in trabajo.productos for s in futuros[id_].result()]
     guardar_proyecto(trabajo)
     from . import revision
     progreso("Revisando los archivos generados...")
@@ -224,35 +240,84 @@ def generar(trabajo, progreso=print):
     return salidas
 
 
-def _generar_raster(p, jug, trabajo, aj, imp, edi, progreso):
+def _generar_producto(trabajo, id_, progreso, hilos):
+    p = productos.cargar_plantilla(id_)
+    jug = jugadores_para(trabajo, p)
+    if not jug:
+        return []
+    progreso(f"Generando {p['nombre']}...")
+    salidas = []
+    aj = trabajo.ajustes.get(id_, {})
+    base = os.path.join(trabajo.carpeta_equipo, p["nombre"])
+    imp, edi = os.path.join(base, "IMPRESION"), os.path.join(base, "EDITABLE")
+    if id_ == "cartas":
+        from . import cartas
+        salidas += cartas.generar(p, jug, trabajo.equipo, aj, imp, edi, progreso, hilos)
+    elif p["tipo"] == "pdf":
+        hs = productos.hojas(p, jug)
+        nombre = productos.nombre_archivo(p, trabajo.equipo)
+        fotos = productos.fotos_pdf(p, hs, aj, hilos)
+        with _PDF:
+            doc = productos.pdf(p, hs, trabajo.equipo, aj, marca=trabajo.marca, fotos=fotos)
+            if "pdf" in p["impresion"]:
+                salidas.append(productos.guardar_pdf(doc, os.path.join(imp, nombre), hilos=hilos))
+            if "jpg" in p["impresion"]:
+                salidas += productos.pdf_a_jpg(doc, os.path.join(imp, nombre))
+            if "tif" in p["impresion"]:
+                salidas += productos.pdf_a_tif(doc, os.path.join(imp, nombre))
+            recortes = os.path.join(edi, "FOTOS") if p.get("guardar_recortes") else None
+            salidas.append(productos.guardar_pdf(productos.pdf(p, hs, trabajo.equipo, aj, capas=True,
+                                                               marca=trabajo.marca, carpeta_recortes=recortes,
+                                                               fotos=fotos),
+                                                 os.path.join(edi, nombre), p.get("editable", "pdf"), hilos))
+    else:
+        salidas += _generar_raster(p, jug, trabajo, aj, imp, edi, progreso, hilos)
+    progreso(f"Hecho {p['nombre']}")
+    return salidas
+
+
+def _generar_raster(p, jug, trabajo, aj, imp, edi, progreso, hilos):
     salidas = []
     una_por_jugador = p.get("jugadores_por_hoja", 1) == 1 and len(p["huecos"]) == 1
     if una_por_jugador:
-        todas_capas = []
-        for j in jug:
+        def uno(j):
             progreso(f"  {p['nombre']}: {j.nombre}")
             final, capas = productos.raster(p, [j], trabajo.equipo, aj, marca=trabajo.marca)
             nombre = productos.nombre_archivo(p, trabajo.equipo, foto=j.nombre)
-            for fmt in p["impresion"]:
-                salidas.append(productos.guardar_raster(final, os.path.join(imp, nombre), fmt))
-            if p["id"] == "pared":
-                todas_capas.append(capas[1])   # la foto
-                logo = capas[2:]
-            else:
-                salidas.append(productos.guardar_psd(capas, tuple(p["lienzo"]), p["color"], os.path.join(edi, nombre)))
-        if p["id"] == "pared" and todas_capas:
-            # como la plantilla original: un solo archivo con una capa por jugador
-            capas = [("Fondo",) + tuple(capas[0][1:])] + todas_capas + logo
+            hechos = [productos.guardar_raster(final, os.path.join(imp, nombre), fmt) for fmt in p["impresion"]]
+            if p["id"] != "pared":
+                hechos.append(productos.guardar_psd(capas, tuple(p["lienzo"]), p["color"], os.path.join(edi, nombre),
+                                                    final))
+                capas, final = None, None   # no hacen falta después: se libera la memoria
+            return hechos, capas, final
+        # calendario de pared: como la plantilla original, un solo PSD con una capa por
+        # jugador; cada capa se añade en cuanto ese jugador está listo
+        todos = productos.PSDPorCapas(tuple(p["lienzo"]), p["color"]) if p["id"] == "pared" else None
+        for hechos, capas, ultima in hilos.map(uno, jug):     # en el orden de los jugadores
+            salidas += hechos
+            if todos is not None:
+                if not todos.psd:
+                    todos.añadir("Fondo", *capas[0][1:])
+                todos.añadir(*capas[1])                    # la foto
+                logo, final = capas[2:], ultima
+        if todos is not None and len(todos.psd):
+            for c in logo:
+                todos.añadir(*c)
             nombre = productos.nombre_archivo(p, trabajo.equipo, foto="TODOS").replace(" - TODOS", "")
-            salidas.append(productos.guardar_psd(capas, tuple(p["lienzo"]), p["color"], os.path.join(edi, nombre)))
+            # se ve el último jugador (la capa de arriba), como al componer las capas
+            salidas.append(todos.guardar(os.path.join(edi, nombre), final))
     else:
-        for n, hoja in enumerate(productos.hojas(p, jug), 1):
+        def hoja(n_hoja):
+            n, jugadores = n_hoja
             progreso(f"  {p['nombre']}: hoja {n}")
-            final, capas = productos.raster(p, hoja, trabajo.equipo, aj, n, marca=trabajo.marca)
+            final, capas = productos.raster(p, jugadores, trabajo.equipo, aj, n, marca=trabajo.marca)
             nombre = productos.nombre_archivo(p, trabajo.equipo, n=n)
-            for fmt in p["impresion"]:
-                salidas.append(productos.guardar_raster(final, os.path.join(imp, nombre), fmt))
-            salidas.append(productos.guardar_psd(capas, tuple(p["lienzo"]), p["color"], os.path.join(edi, nombre)))
+            hechos = [productos.guardar_raster(final, os.path.join(imp, nombre), fmt) for fmt in p["impresion"]]
+            hechos.append(productos.guardar_psd(capas, tuple(p["lienzo"]), p["color"], os.path.join(edi, nombre),
+                                                final))
+            return hechos
+        for hechos in hilos.map(hoja, list(enumerate(productos.hojas(p, jug), 1))):
+            salidas += hechos
     return salidas
 
 

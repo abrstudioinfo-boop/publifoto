@@ -93,9 +93,8 @@ class ZonaArrastre(QLabel):
     def _estilo(self, activo):
         self.setStyleSheet(
             "QLabel{border:1.5px dashed %s;border-radius:16px;padding:14px;background:%s}"
-            "QLabel:hover{border-color:rgba(255,40,150,0.8)}"
-            % (("rgba(255,40,150,0.95)", "rgba(230,0,127,0.14)") if activo
-               else ("rgba(255,120,190,0.30)", "rgba(255,255,255,0.02)")))
+            "QLabel:hover{border-color:#E6007F;background:#FFF4F9}"
+            % (("#E6007F", "#FFE6F2") if activo else ("rgba(230,0,127,0.40)", "#FFFFFF")))
 
     def dragEnterEvent(self, e):
         if e.mimeData().hasUrls():
@@ -148,7 +147,7 @@ class Revision(QDialog):
         botones = QGridLayout()
         for txt, d, f, c in [("▲ Subir", (0, 0.01, 1), 0, 1), ("◀ Izquierda", (0.01, 0, 1), 1, 0),
                              ("Derecha ▶", (-0.01, 0, 1), 1, 2), ("▼ Bajar", (0, -0.01, 1), 2, 1),
-                             ("＋ Acercar", (0, 0, 1.03), 0, 3), ("－ Alejar", (0, 0, 1 / 1.03), 2, 3)]:
+                             ("+ Acercar", (0, 0, 1.03), 0, 3), ("− Alejar", (0, 0, 1 / 1.03), 2, 3)]:
             b = QPushButton(txt)
             b.setAutoRepeat(True)
             b.clicked.connect(lambda _=False, d=d: self.mover(*d))
@@ -300,7 +299,7 @@ class Revision(QDialog):
         alto = 600
         vista = encuadre.recortar(im, caja, (int(alto * ar), alto))
         if vista.mode == "RGBA":
-            fondo = Image.new("RGBA", vista.size, (60, 60, 60, 255))
+            fondo = Image.new("RGBA", vista.size, (243, 237, 241, 255))
             fondo.alpha_composite(vista)
             vista = fondo
         self.vista.setPixmap(a_pixmap(vista))
@@ -363,8 +362,8 @@ class EncuadrePlantilla(QDialog):
                                   ("◀ A la izquierda", ("centro", 0.005), 1, 0),
                                   ("A la derecha ▶", ("centro", -0.005), 1, 2),
                                   ("▼ Jugador más abajo", ("margen", 0.005), 2, 1),
-                                  ("＋ Más cerca", ("alto_rel", 1 / 1.03), 0, 3),
-                                  ("－ Más lejos", ("alto_rel", 1.03), 2, 3)]:
+                                  ("+ Más cerca", ("alto_rel", 1 / 1.03), 0, 3),
+                                  ("− Más lejos", ("alto_rel", 1.03), 2, 3)]:
             b = QPushButton(txt)
             b.setAutoRepeat(True)
             b.clicked.connect(lambda _=False, a=accion: self.mover(*a))
@@ -533,11 +532,11 @@ class Ventana(QMainWindow):
         self.vista_escudo = QLabel()
         self.vista_escudo.setFixedSize(52, 52)
         self.vista_escudo.setAlignment(Qt.AlignCenter)
-        self.vista_escudo.setStyleSheet(f"background:rgba(255,255,255,0.04);border:1px solid {tema.BORDE};"
+        self.vista_escudo.setStyleSheet(f"background:#FFFFFF;border:1px solid {tema.BORDE};"
                                         "border-radius:14px")
         self.combo_escudo = QComboBox()
         self.combo_escudo.setMinimumWidth(200)
-        b_logos = rol(QPushButton("＋ Añadir logos"), "enlace")
+        b_logos = rol(QPushButton("+ Añadir logos"), "enlace")
         b_logos.setToolTip("Elige una carpeta con los escudos de los clubs: el nombre de cada archivo es el del club.")
         b_logos.clicked.connect(self.anadir_logos)
         col = QVBoxLayout()
@@ -773,7 +772,7 @@ class Ventana(QMainWindow):
         self.b_revisar.setEnabled(si)
         # mientras trabaja en segundo plano no se puede tocar nada que el motor esté leyendo
         ocupado = self.hilo is not None and self.hilo.isRunning()
-        self.pastilla.setText(tema.punto(tema.ROSA_CLARO) + "  TRABAJANDO" if ocupado else tema.punto(tema.VERDE) + "  LISTO")
+        self.pastilla.setText(tema.punto(tema.ROSA) + "  TRABAJANDO" if ocupado else tema.punto(tema.VERDE) + "  LISTO")
         for w in (self.rejilla, self.lista_avisos, self.zona, self.zona_rec, *self.casillas.values(),
                   self.combo_escudo, self.txt_club, self.txt_temporada):
             w.setEnabled(not ocupado)

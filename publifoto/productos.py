@@ -162,17 +162,56 @@ def foto_recortada(jugador, plantilla, tam, ajuste=None, recorte=False):
     caja = encuadre.calcular(puntos, tam[0] / tam[1], enc, ajuste)
     ruta = jugador.ruta_recorte if recorte else jugador.ruta
     im = abrir(ruta)
-    im = im.convert("RGBA") if recorte else color.a_rgb(im)
+    perfil = None
+    if recorte:
+        im = im.convert("RGBA")
+    else:
+        # el perfil de color se aplica al final, solo al trozo recortado (mucho más rápido
+        # que convertir la foto entera)
+        if im.mode == "CMYK":
+            im = color.a_rgb(im)
+        else:
+            perfil = color.perfil_origen(im)
+            im = im if im.mode == "RGB" else im.convert("RGB")
     if recorte and im.size != (jugador.puntos.ancho, jugador.puntos.alto):
         # el recorte debe tener el mismo tamaño que la foto arreglada
         im = im.resize((jugador.puntos.ancho, jugador.puntos.alto), Image.LANCZOS)
     im = retoque.de_jugador(jugador, im)
-    return encuadre.recortar(girar(im, giro), caja, tam)
+    trozo = encuadre.recortar(girar(im, giro), caja, tam)
+    return color.a_rgb(trozo, perfil) if perfil is not None else trozo
 
 
 # --- productos raster (llaveros, 15x20, pared) -------------------------------
 
+_encimas = {}
+_en_cmyk = {}
+
+
+def limpiar_cache():
+    """Al empezar a generar: las plantillas o el escudo pueden haber cambiado."""
+    _encimas.clear()
+    _en_cmyk.clear()
+    _comprimidas.clear()
+    _fondos.clear()
+
+
+def cmyk_de_capa(im):
+    """Una capa RGB(A) de la plantilla en CMYK, convertida una sola vez."""
+    clave = id(im)
+    if clave not in _en_cmyk:
+        _en_cmyk[clave] = (im, color.a_cmyk(im.convert("RGB")))
+    return _en_cmyk[clave][1]
+
+
 def _encima(plantilla, marca=None):
+    """Capas que van encima de las fotos (logo, textos). Se leen una vez por plantilla."""
+    clave = (plantilla["_carpeta"], (marca or {}).get("escudo"))
+    if clave not in _encimas:
+        _encimas[clave] = _leer_encima(plantilla, marca)
+    return list(_encimas[clave])
+
+
+def _leer_encima(plantilla, marca=None):
     capas = []
     escudo = (marca or {}).get("escudo")
     for c in plantilla.get("encima", []):
@@ -192,12 +231,27 @@ def _encima(plantilla, marca=None):
     return capas
 
 
+_fondos = {}
+
+
+def _fondo_liso(tam, rgb, cmyk):
+    """Lienzo de un color (en CMYK si toca). Se convierte un solo píxel: es igual en todo."""
+    clave = (tam, rgb, cmyk)
+    if clave not in _fondos:
+        if cmyk:
+            px = color.a_cmyk(Image.new("RGB", (1, 1), rgb)).getpixel((0, 0))
+            _fondos[clave] = Image.new("CMYK", tam, px)
+        else:
+            _fondos[clave] = Image.new("RGB", tam, rgb)
+    return _fondos[clave].copy()
+
+
 def raster(plantilla, jugadores, equipo, ajustes, n_hoja=1, marca=None):
     """Devuelve (imagen_final, capas) para una hoja. capas = [(nombre, im, alfa, x, y)]."""
     W, H = plantilla["lienzo"]
     cmyk = plantilla["color"] == "CMYK"
-    fondo = Image.new("RGB", (W, H), tuple(plantilla.get("fondo_color", [255, 255, 255])))
-    capas = [("Fondo", color.a_cmyk(fondo) if cmyk else fondo, None, 0, 0)]
+    fondo = _fondo_liso((W, H), tuple(plantilla.get("fondo_color", [255, 255, 255])), cmyk)
+    capas = [("Fondo", fondo, None, 0, 0)]
     for rect, _, j in colocacion(plantilla, jugadores):
         x0, y0, x1, y1 = [int(round(v)) for v in rect]
         x0c, y0c = max(0, x0), max(0, y0)
@@ -213,7 +267,7 @@ def raster(plantilla, jugadores, equipo, ajustes, n_hoja=1, marca=None):
         if im.mode == "RGBA" and not cmyk:
             final.paste(im.convert("RGB"), (x, y), im.getchannel("A"))
         elif im.mode == "RGBA" and cmyk:
-            final.paste(color.a_cmyk(im.convert("RGB")), (x, y), im.getchannel("A"))
+            final.paste(cmyk_de_capa(im), (x, y), im.getchannel("A"))
         else:
             final.paste(im, (x, y), alfa)
     return final, capas
@@ -232,30 +286,59 @@ def guardar_raster(im, ruta_sin_ext, formato, ppp=300):
     raise ValueError(formato)
 
 
-def guardar_psd(capas, tam, modo, ruta):
-    """PSD por capas: se abre en Photoshop, Affinity, GIMP, Krita, Photopea..."""
-    from psd_tools import PSDImage
-    from psd_tools.api.layers import PixelLayer
-    from psd_tools.constants import Compression
-    os.makedirs(os.path.dirname(ruta), exist_ok=True)
-    psd = PSDImage.new(modo, tam)
-    for nombre, im, alfa, x, y in capas:
-        if modo == "CMYK":
+class PSDPorCapas:
+    """PSD por capas: se abre en Photoshop, Affinity, GIMP, Krita, Photopea...
+    Las capas se pueden ir añadiendo según están listas (el calendario de pared junta a
+    todos los jugadores) y se guarda al final."""
+
+    def __init__(self, tam, modo):
+        from psd_tools import PSDImage
+        self.modo = modo
+        self.psd = PSDImage.new(modo, tam)
+
+    def añadir(self, nombre, im, alfa, x, y):
+        from psd_tools.api.layers import PixelLayer
+        from psd_tools.constants import Compression
+        if self.modo == "CMYK":
             if im.mode != "CMYK":
                 a = im.getchannel("A") if im.mode == "RGBA" else alfa
-                im = color.a_cmyk(im.convert("RGB"))
+                im = cmyk_de_capa(im)
                 alfa = a
             arr = 255 - np.asarray(im)
             if alfa is not None:
                 arr = np.dstack([arr, np.asarray(alfa)])
-            PixelLayer.fromarray(np.ascontiguousarray(arr), psd, nombre, top=y, left=x, compression=Compression.RLE)
+            PixelLayer.fromarray(np.ascontiguousarray(arr), self.psd, nombre, top=y, left=x,
+                                 compression=Compression.RLE)
         else:
             if alfa is not None:
                 im = im.convert("RGB")
                 im.putalpha(alfa)
-            PixelLayer.frompil(im, psd, nombre, top=y, left=x, compression=Compression.RLE)
-    psd.save(ruta + ".psd")
-    return ruta + ".psd"
+            PixelLayer.frompil(im, self.psd, nombre, top=y, left=x, compression=Compression.RLE)
+
+    def guardar(self, ruta, final=None):
+        """final: la imagen ya compuesta (la de impresión). Si se da, es la vista previa
+        del PSD y psd_tools no tiene que volver a componer todas las capas (lo más lento)."""
+        from psd_tools.api import numpy_io
+        psd = self.psd
+        os.makedirs(os.path.dirname(ruta), exist_ok=True)
+        if final is not None:
+            f = final if final.mode == self.modo else (color.a_cmyk(final) if self.modo == "CMYK"
+                                                        else color.cmyk_a_rgb(final))
+            a = np.asarray(f, np.float32) / 255
+            if self.modo == "CMYK":
+                a = 1 - a          # el PSD guarda el CMYK invertido
+            alfa_total = np.ones(a.shape[:2] + (1,), np.float32)
+            psd._update_preview = lambda: psd._record.image_data.set_data(
+                numpy_io.encode_image_data(psd, a, alfa_total), psd._record.header)
+        psd.save(ruta + ".psd")
+        return ruta + ".psd"
+
+
+def guardar_psd(capas, tam, modo, ruta, final=None):
+    psd = PSDPorCapas(tam, modo)
+    for c in capas:
+        psd.añadir(*c)
+    return psd.guardar(ruta, final)
 
 
 # --- productos PDF (imanes, sobremesa) ---------------------------------------
@@ -315,7 +398,23 @@ def _abrir_fondo(plantilla, archivo, marca):
     return d
 
 
-def pdf(plantilla, hojas_jugadores, equipo, ajustes, capas=False, carpeta_recortes=None, marca=None):
+def fotos_pdf(plantilla, hojas_jugadores, ajustes, hilos=None):
+    """Las fotos ya recortadas de todos los huecos, {(hoja, hueco): imagen}. Con 'hilos'
+    (un ThreadPoolExecutor) se hacen varias a la vez. Sirven para el PDF de impresión y
+    para el editable: cada foto se recorta una sola vez."""
+    ppp = plantilla.get("ppp_fotos", 300)
+    tareas = []
+    for n, jugadores in enumerate(hojas_jugadores):
+        for k, (rect, _, j) in enumerate(colocacion(plantilla, jugadores)):
+            r = fitz.Rect(rect)
+            tam = (int(round(r.width / 72 * ppp)), int(round(r.height / 72 * ppp)))
+            tareas.append(((n, k), j, tam))
+    hacer = lambda t: foto_recortada(t[1], plantilla, t[2], ajustes.get(t[1].id))
+    ims = list(hilos.map(hacer, tareas)) if hilos else [hacer(t) for t in tareas]
+    return {t[0]: im for t, im in zip(tareas, ims)}
+
+
+def pdf(plantilla, hojas_jugadores, equipo, ajustes, capas=False, carpeta_recortes=None, marca=None, fotos=None):
     """Crea el documento PDF completo (todas las hojas). Con capas=True cada parte
     va en su capa (Jugadores, Diseño, Texto) para editarla. Si se da
     carpeta_recortes, guarda ahí cada foto ya recortada al marco."""
@@ -328,12 +427,12 @@ def pdf(plantilla, hojas_jugadores, equipo, ajustes, capas=False, carpeta_recort
     if capas:
         for n in ("Jugadores", "Diseño", "Texto"):
             oc[n] = doc.add_ocg(n, on=True)
-    for jugadores in hojas_jugadores:
+    for n, jugadores in enumerate(hojas_jugadores):
         pg = doc.new_page(width=fondo[0].rect.width, height=fondo[0].rect.height)
-        for rect, espejo, j in colocacion(plantilla, jugadores):
+        for k, (rect, espejo, j) in enumerate(colocacion(plantilla, jugadores)):
             r = fitz.Rect(rect)
             tam = (int(round(r.width / 72 * ppp)), int(round(r.height / 72 * ppp)))
-            im = foto_recortada(j, plantilla, tam, ajustes.get(j.id))
+            im = fotos[(n, k)] if fotos else foto_recortada(j, plantilla, tam, ajustes.get(j.id))
             if espejo:
                 im = im.transpose(Image.FLIP_TOP_BOTTOM)
             if carpeta_recortes:
@@ -383,10 +482,35 @@ def _guardar_recorte(im, espejo, j, carpeta):
     im.convert("RGB").save(os.path.join(carpeta, nombre), quality=95, dpi=(300, 300), icc_profile=color.icc_srgb())
 
 
-def guardar_pdf(doc, ruta_sin_ext, formato="pdf"):
+_comprimidas = {}
+
+
+def _comprimir_fotos(doc, hilos=None):
+    """Comprime las fotos del PDF que van sin comprimir (las CMYK), varias a la vez.
+    Al guardar, MuPDF lo haría de una en una y es lo más lento de los PDF. La misma foto
+    del PDF de impresión y del editable se comprime una sola vez."""
+    import hashlib
+    import zlib
+    pendientes = []
+    for x in range(1, doc.xref_length()):
+        if doc.xref_get_key(x, "Subtype")[1] == "/Image" and doc.xref_get_key(x, "Filter")[0] == "null":
+            datos = doc.xref_stream_raw(x)
+            pendientes.append((x, hashlib.md5(datos).hexdigest(), datos))
+    nuevas = {h: d for _, h, d in pendientes if h not in _comprimidas}
+    hacer = lambda hd: (hd[0], zlib.compress(hd[1], 6))
+    for h, z in (hilos.map(hacer, nuevas.items()) if hilos else map(hacer, nuevas.items())):
+        _comprimidas[h] = z
+    for x, h, _ in pendientes:
+        doc.update_stream(x, _comprimidas[h], compress=False)
+        doc.xref_set_key(x, "Filter", "/FlateDecode")
+        doc.xref_set_key(x, "DecodeParms", "null")
+
+
+def guardar_pdf(doc, ruta_sin_ext, formato="pdf", hilos=None):
     """formato «ai»: el mismo PDF por capas con extensión .ai, que Illustrator abre como
     documento editable (un .ai de Illustrator es un PDF por dentro)."""
     os.makedirs(os.path.dirname(ruta_sin_ext), exist_ok=True)
+    _comprimir_fotos(doc, hilos)
     ruta = ruta_sin_ext + (".ai" if formato == "ai" else ".pdf")
     doc.save(ruta, garbage=3, deflate=True)
     return ruta
