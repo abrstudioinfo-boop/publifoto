@@ -338,7 +338,14 @@ def pdf(plantilla, hojas_jugadores, equipo, ajustes, capas=False, carpeta_recort
                 im = im.transpose(Image.FLIP_TOP_BOTTOM)
             if carpeta_recortes:
                 _guardar_recorte(im, espejo, j, carpeta_recortes)
-            pg.insert_image(r, stream=_jpeg(im, cmyk), keep_proportion=False, oc=oc.get("Jugadores", 0))
+            if cmyk:
+                # CMYK sin JPEG: con JPEG CMYK, MuPDF marca los colores como invertidos
+                # (/Decode) e Illustrator los vuelve a invertir: la foto sale en negativo
+                c = color.a_cmyk(im)
+                pix = fitz.Pixmap(fitz.csCMYK, c.width, c.height, c.tobytes(), False)
+                pg.insert_image(r, pixmap=pix, keep_proportion=False, oc=oc.get("Jugadores", 0))
+            else:
+                pg.insert_image(r, stream=_jpeg(im, cmyk), keep_proportion=False, oc=oc.get("Jugadores", 0))
         # el diseño va encima de las fotos (marcos rojos incluidos)
         # hoja incompleta: fondo sin los calendarios que no llevan jugador
         parcial = plantilla.get("fondos_parciales", {}).get(str(len(jugadores)))
