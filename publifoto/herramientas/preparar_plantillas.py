@@ -279,7 +279,7 @@ def imanes(origen, carpeta=None):
         "textos": [{"texto": "{EQUIPO}", "centro_x": round((x0 + x1) / 2, 2) + 3.7, "base_y": round(texto["origin"][1], 2),
                     "tam": texto["size"], "fuente": "SourceSans3-Regular.ttf", "color": [0, 0, 0, 1]}]
                   + _club_y_temporada(quitados),
-        "impresion": ["pdf", "tif"], "editable": "pdf", "archivo": "IMANES {EQUIPO}",
+        "impresion": ["pdf", "tif"], "editable": "ai", "archivo": "IMANES {EQUIPO}",
         "excluir": ["entrenador", "equipo"],
     })
 

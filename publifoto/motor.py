@@ -213,7 +213,7 @@ def generar(trabajo, progreso=print):
             recortes = os.path.join(edi, "FOTOS") if p.get("guardar_recortes") else None
             salidas.append(productos.guardar_pdf(productos.pdf(p, hs, trabajo.equipo, aj, capas=True, marca=trabajo.marca,
                                                                carpeta_recortes=recortes),
-                                                 os.path.join(edi, nombre)))
+                                                 os.path.join(edi, nombre), p.get("editable", "pdf")))
         else:
             salidas += _generar_raster(p, jug, trabajo, aj, imp, edi, progreso)
     guardar_proyecto(trabajo)

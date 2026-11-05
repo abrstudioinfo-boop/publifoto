@@ -376,10 +376,13 @@ def _guardar_recorte(im, espejo, j, carpeta):
     im.convert("RGB").save(os.path.join(carpeta, nombre), quality=95, dpi=(300, 300), icc_profile=color.icc_srgb())
 
 
-def guardar_pdf(doc, ruta_sin_ext):
+def guardar_pdf(doc, ruta_sin_ext, formato="pdf"):
+    """formato «ai»: el mismo PDF por capas con extensión .ai, que Illustrator abre como
+    documento editable (un .ai de Illustrator es un PDF por dentro)."""
     os.makedirs(os.path.dirname(ruta_sin_ext), exist_ok=True)
-    doc.save(ruta_sin_ext + ".pdf", garbage=3, deflate=True)
-    return ruta_sin_ext + ".pdf"
+    ruta = ruta_sin_ext + (".ai" if formato == "ai" else ".pdf")
+    doc.save(ruta, garbage=3, deflate=True)
+    return ruta
 
 
 def pdf_a_tif(doc, ruta_sin_ext, ppp=300):
