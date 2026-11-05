@@ -31,6 +31,9 @@ class Jugador:
     giro_dudoso: bool = False
     sin_giro_auto: bool = False    # el operario ha quitado el giro automático
     revisados: list = field(default_factory=list)   # revisores cuyos avisos ya ha mirado el operario
+    retoque: list = field(default_factory=list)     # granos y rojeces a quitar (retoque.py)
+    sin_retoque: bool = False      # el operario ha quitado el retoque de piel de esta foto
+    retocar: bool = True           # retoque activo al generar (lo pone el trabajo)
 
     @property
     def id(self):
@@ -54,6 +57,9 @@ class Trabajo:
     escudo: str = None        # logo del club (club.py); None = el de la plantilla
     club: str = None          # nombre del club en los imanes; None = el de la plantilla
     temporada: str = None     # «26/27»; None = la temporada actual
+    retocar_piel: bool = True # quitar granos y rojeces notables (retoque.py)
+    subcarpeta: bool = True   # False: los productos van directamente en carpeta_salida
+                              # (la carpeta arrastrada); True: en carpeta_salida/<equipo>
 
     @property
     def marca(self):
@@ -62,6 +68,8 @@ class Trabajo:
 
     @property
     def carpeta_equipo(self):
+        if not self.subcarpeta:
+            return self.carpeta_salida
         return os.path.join(self.carpeta_salida, self.equipo)
 
     @property
@@ -102,9 +110,12 @@ def preparar(trabajo, progreso=print):
                                          "No se encuentra a nadie en la foto: queda fuera."))
         if not sin_persona:
             avisos += revision.preparar_jugador(j)
+            from . import retoque
+            avisos += retoque.preparar_jugador(j)
         if j.id in previos:   # respetar lo que el operario ya decidió
             v = previos[j.id]
             j.incluido, j.giro, j.sin_giro_auto = v.incluido, v.giro, v.sin_giro_auto
+            j.sin_retoque = v.sin_retoque
             j.revisados = list(v.revisados)
             if v.tipo_manual:
                 j.tipo, j.tipo_manual = v.tipo, True
@@ -159,13 +170,24 @@ def comprobar(trabajo):
     return avisos
 
 
+PRODUCTOS_CON_ENTRENADORES = ("pared",)   # los entrenadores solo salen en el calendario de pared
+
+
 def jugadores_para(trabajo, plantilla):
-    excluir = plantilla.get("excluir", [])
+    # la regla de los entrenadores es del programa, no de la plantilla: así una plantilla
+    # nueva (o una antigua de otro ordenador) no los mete donde no van
+    excluir = set(plantilla.get("excluir", [])) | {"equipo"}
+    if plantilla.get("id") in PRODUCTOS_CON_ENTRENADORES:
+        excluir.discard("entrenador")
+    else:
+        excluir.add("entrenador")
     return [j for j in trabajo.jugadores if j.incluido and j.tipo not in excluir]
 
 
 def generar(trabajo, progreso=print):
     salidas = []
+    for j in trabajo.jugadores:
+        j.retocar = trabajo.retocar_piel
     for id_ in trabajo.productos:
         p = productos.cargar_plantilla(id_)
         progreso(f"Generando {p['nombre']}...")
@@ -242,10 +264,11 @@ def guardar_proyecto(trabajo):
         "version": 2, "equipo": trabajo.equipo, "escudo": trabajo.escudo, "club": trabajo.club,
         "temporada": trabajo.temporada, "carpeta_fotos": trabajo.carpeta_fotos,
         "carpeta_recortes": trabajo.carpeta_recortes, "carpeta_salida": trabajo.carpeta_salida,
+        "subcarpeta": trabajo.subcarpeta, "retocar_piel": trabajo.retocar_piel,
         "productos": trabajo.productos, "ajustes": trabajo.ajustes,
         "jugadores": [{"foto": j.id, "tipo": j.tipo, "incluido": j.incluido, "giro": j.giro,
                        "tipo_manual": j.tipo_manual, "sin_giro_auto": j.sin_giro_auto,
-                       "revisados": j.revisados}
+                       "revisados": j.revisados, "sin_retoque": j.sin_retoque}
                       for j in trabajo.jugadores],
     }
     with open(trabajo.ruta_proyecto, "w", encoding="utf-8") as f:
@@ -257,12 +280,13 @@ def abrir_proyecto(ruta, progreso=print):
         d = json.load(f)
     t = Trabajo(equipo=d["equipo"], carpeta_fotos=d["carpeta_fotos"], carpeta_salida=d["carpeta_salida"],
                 carpeta_recortes=d.get("carpeta_recortes"), productos=d["productos"], ajustes=d.get("ajustes", {}),
-                escudo=d.get("escudo"), club=d.get("club"), temporada=d.get("temporada"))
+                escudo=d.get("escudo"), club=d.get("club"), temporada=d.get("temporada"),
+                subcarpeta=d.get("subcarpeta", True), retocar_piel=d.get("retocar_piel", True))
     t.jugadores = []
     for x in d["jugadores"]:
         j = Jugador(ruta=os.path.join(t.carpeta_fotos, x["foto"]), tipo=x["tipo"], incluido=x["incluido"],
                     giro=x.get("giro", 0.0), sin_giro_auto=x.get("sin_giro_auto", False),
-                    revisados=list(x.get("revisados", [])))
+                    revisados=list(x.get("revisados", [])), sin_retoque=x.get("sin_retoque", False))
         if "tipo_manual" in x:
             j.tipo_manual = x["tipo_manual"]
         elif os.path.exists(j.ruta):

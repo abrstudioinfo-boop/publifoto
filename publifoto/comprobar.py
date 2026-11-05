@@ -34,8 +34,29 @@ def comprobar():
     paso("modelo de silueta (rembg)", lambda: analisis._rembg())
     paso("modelos de cara y cuerpo (MediaPipe)", lambda: _mediapipe(gris))
     paso("carpeta de trabajo", lambda: os.makedirs(analisis.carpeta_cache(), exist_ok=True))
+    paso("retoque de piel", _retoque)
     print("TODO BIEN" if not fallos else f"FALLAN {len(fallos)}: " + ", ".join(fallos))
     return not fallos
+
+
+def _retoque():
+    """Un grano rojo pintado sobre piel con poros tiene que desaparecer sin dejar la piel lisa."""
+    import cv2
+    import numpy as np
+    from PIL import Image
+    from . import retoque
+    rng = np.random.default_rng(1)
+    piel = np.full((400, 400, 3), (224, 182, 160), np.float32) + rng.normal(0, 4, (400, 400, 1))
+    lab = cv2.cvtColor(np.clip(piel, 0, 255).astype(np.float32) / 255, cv2.COLOR_RGB2LAB)
+    yy, xx = np.mgrid[0:400, 0:400]
+    lab[..., 1] += 14 * np.exp(-((xx - 200) ** 2 + (yy - 200) ** 2) / (2 * 4.0 ** 2))
+    sucio = (np.clip(cv2.cvtColor(lab, cv2.COLOR_LAB2RGB), 0, 1) * 255).astype(np.uint8)
+    curado = np.asarray(retoque.aplicar(Image.fromarray(sucio), [[0.5, 0.5, 7 / 400]]), np.float32) / 255
+    a = cv2.cvtColor(curado, cv2.COLOR_RGB2LAB)[..., 1]
+    rojo = float(cv2.GaussianBlur(a, (0, 0), 2)[200, 200] - np.median(a))
+    textura = float(np.std(cv2.cvtColor(curado, cv2.COLOR_RGB2LAB)[190:211, 190:211, 0]))
+    if rojo > 2 or textura < 0.5:
+        raise RuntimeError(f"queda rojo {rojo:.1f} / textura {textura:.2f}")
 
 
 def _mediapipe(im):
@@ -147,6 +168,13 @@ def prueba_completa(salida, jugadores=7, entrenadores=1, escudo=None, club="CLUB
     fallos = [a for a in t.avisos if a.nivel == "error" and a.revisor in ("salida", "presencia")]
     for a in fallos:
         print(f"  MAL {a.producto or ''} {a.foto}: {a.texto}")
+    # los entrenadores solo en el calendario de pared
+    for id_ in t.productos:
+        pl = motor.productos.cargar_plantilla(id_)
+        con = [j.id for j in motor.jugadores_para(t, pl) if j.tipo == "entrenador"]
+        if bool(con) != (id_ in motor.PRODUCTOS_CON_ENTRENADORES) and entrenadores:
+            fallos.append(f"entrenadores en {id_}: {con}")
+            print(f"  MAL {pl['nombre']}: " + ("salen entrenadores" if con else "falta el entrenador"))
     por_producto = {}
     for s in salidas:
         p = os.path.relpath(s, t.carpeta_equipo).split(os.sep)[0]

@@ -4,7 +4,7 @@ import sys
 import traceback
 from dataclasses import replace
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageOps
 from PySide6.QtCore import QObject, QSettings, Qt, QThread, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QImage, QPixmap
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFrame, QGridLayout,
@@ -168,6 +168,9 @@ class Revision(QDialog):
         self.b_auto = QCheckBox("Enderezar la cabeza automáticamente en este primer plano")
         self.b_auto.toggled.connect(self.cambiar_auto)
         der.addWidget(self.b_auto)
+        self.b_piel = QCheckBox("Quitar los granos y rojeces de esta foto")
+        self.b_piel.toggled.connect(self.cambiar_piel)
+        der.addWidget(self.b_piel)
         self.lbl_avisos = QLabel()
         self.lbl_avisos.setWordWrap(True)
         rol(self.lbl_avisos, "aviso")
@@ -213,6 +216,12 @@ class Revision(QDialog):
                 j.revisados.append("inclinacion")
             self.pintar()
 
+    def cambiar_piel(self, si):
+        j = self.actual()
+        if j and j.sin_retoque == si:
+            j.sin_retoque = not si
+            self.pintar()
+
     def ajuste(self, j):
         return self.t.ajustes.setdefault(self.plantilla["id"], {}).setdefault(j.id, {"dx": 0, "dy": 0, "zoom": 1})
 
@@ -251,6 +260,7 @@ class Revision(QDialog):
         if not j:
             self.vista.clear()
             self.b_auto.hide()
+            self.b_piel.hide()
             self.lbl_giro.setText("")
             self.lbl_avisos.setText("No hay nadie en este producto." if not self.jug else "")
             return
@@ -258,6 +268,14 @@ class Revision(QDialog):
         recorte = p.get("necesita_recorte") and j.ruta_recorte
         im = miniatura(j.ruta_recorte if recorte else j.ruta)
         f = im.width / j.puntos.ancho
+        if self.t.retocar_piel and not j.sin_retoque and j.retoque:
+            # lo que el retoque de piel va a quitar, marcado con un círculo
+            im = im.copy()
+            dib = ImageDraw.Draw(im)
+            for x, y, r in j.retoque:
+                R = max(6, r * im.width * 2.5)
+                dib.ellipse((x * im.width - R, y * im.height - R, x * im.width + R, y * im.height + R),
+                            outline=(230, 0, 127), width=2)
         enc = encuadre.Encuadre(**p["encuadre"])
         ar = aspecto(p)
         puntos, giro = productos.puntos_y_giro(j, p)
@@ -270,6 +288,12 @@ class Revision(QDialog):
         self.b_auto.setText(f"Enderezar la cabeza automáticamente en este primer plano ({j.giro_auto:+.1f}°)"
                             .replace(".", ","))
         self.b_auto.blockSignals(False)
+        n = len(j.retoque)
+        self.b_piel.blockSignals(True)
+        self.b_piel.setVisible(bool(n) and self.t.retocar_piel)
+        self.b_piel.setChecked(not j.sin_retoque)
+        self.b_piel.setText(f"Quitar {'el grano o rojez' if n == 1 else f'los {n} granos o rojeces'} de esta foto")
+        self.b_piel.blockSignals(False)
         self.lbl_avisos.setText("\n".join("⚠ " + a.texto for a in self.avisos_de(j)))
         caja = encuadre.calcular(puntos, ar, enc, self.t.ajustes.get(p["id"], {}).get(j.id))
         caja = encuadre.Caja(caja.x0 * f, caja.y0 * f, caja.x1 * f, caja.y1 * f)
@@ -555,6 +579,10 @@ class Ventana(QMainWindow):
             prod.addWidget(c)
         prod.addStretch()
         v3.addLayout(prod)
+        self.b_piel = QCheckBox("Retocar la piel: quitar granos y rojeces que se noten (las pecas y los lunares se dejan)")
+        self.b_piel.setChecked(True)
+        self.b_piel.toggled.connect(self.piel_cambiada)
+        v3.addWidget(self.b_piel)
         lay.addWidget(t3)
 
         # 04 jugadores y revisión automática
@@ -753,6 +781,10 @@ class Ventana(QMainWindow):
     def ocupado(self):
         return self.hilo is not None and self.hilo.isRunning()
 
+    def piel_cambiada(self, si):
+        if self.trabajo:
+            self.trabajo.retocar_piel = si
+
     def productos_cambiados(self):
         if self.trabajo and self.trabajo.jugadores and not self.ocupado():
             self.trabajo.productos = self.productos_elegidos()
@@ -762,20 +794,25 @@ class Ventana(QMainWindow):
     def actualizar_salida(self):
         s = self.carpeta_salida()
         self.lbl_salida.setText(f"Resultados en  <span style='color:{tema.TEXTO}'>"
-                                f"{corta(s) if s else 'la carpeta de al lado de las fotos'}</span>")
+                                f"{corta(s) if s else 'la carpeta que arrastres'}</span>")
         self.lbl_salida.setToolTip(s or "")
 
     def carpeta_salida(self):
         if self.trabajo:
-            return self.trabajo.carpeta_salida
-        return self.ajustes_app.value("salida", "")
+            return self.trabajo.carpeta_equipo
+        return ""
 
     def elegir_salida(self):
+        """Otra carpeta solo para este equipo: los productos van en <carpeta>/<equipo>.
+        No se recuerda: el siguiente equipo vuelve a ir en la carpeta que se arrastre."""
+        if not self.trabajo:
+            QMessageBox.information(self, "Carpeta de resultados",
+                                    "Los resultados se guardan en la carpeta de fotos que arrastres. "
+                                    "Arrastra primero las fotos y luego podrás cambiarla para ese equipo.")
+            return
         r = QFileDialog.getExistingDirectory(self, "Carpeta donde guardar los resultados")
         if r:
-            self.ajustes_app.setValue("salida", r)
-            if self.trabajo:
-                self.trabajo.carpeta_salida = r
+            self.trabajo.carpeta_salida, self.trabajo.subcarpeta = r, True
             self.actualizar_salida()
 
     def cargar_fotos(self, carpeta):
@@ -788,8 +825,9 @@ class Ventana(QMainWindow):
         equipo, ok = QInputDialog.getText(self, "Nombre del equipo", "¿Cómo se llama el equipo?", text=propuesto)
         if not ok or not equipo.strip():
             return
-        salida = self.ajustes_app.value("salida", "") or os.path.dirname(carpeta.rstrip("/\\"))
-        self.trabajo = motor.Trabajo(equipo=equipo.strip(), carpeta_fotos=carpeta, carpeta_salida=salida)
+        # los productos van dentro de la misma carpeta que se ha arrastrado
+        self.trabajo = motor.Trabajo(equipo=equipo.strip(), carpeta_fotos=carpeta, carpeta_salida=carpeta,
+                                     subcarpeta=False, retocar_piel=self.b_piel.isChecked())
         self.desde_proyecto = False
         if self.zona_rec.property("ruta"):
             self.trabajo.carpeta_recortes = self.zona_rec.property("ruta")
@@ -816,6 +854,7 @@ class Ventana(QMainWindow):
         self.zona.mostrar(t.equipo, t.carpeta_fotos, hecho=True)
         for id_, c in self.casillas.items():
             c.setChecked(id_ in t.productos)
+        self.b_piel.setChecked(t.retocar_piel)
         self.analizado(t)
 
     def analizar(self):
@@ -994,19 +1033,23 @@ class Ventana(QMainWindow):
         if avisos and QMessageBox.question(self, "Antes de generar", "\n".join(avisos) + "\n\n¿Seguir igualmente?") \
                 != QMessageBox.Yes:
             return
-        if os.path.exists(t.carpeta_equipo) and not self.desde_proyecto:
+        hechos = [p["nombre"] for p in map(productos.cargar_plantilla, t.productos)
+                  if os.path.exists(os.path.join(t.carpeta_equipo, p["nombre"]))]
+        if hechos and not self.desde_proyecto:
             caja = QMessageBox(self)
-            caja.setWindowTitle("La carpeta ya existe")
-            caja.setText(f"Ya existe la carpeta «{t.equipo}» en la carpeta de resultados.")
+            caja.setWindowTitle("Ya hay resultados")
+            caja.setText(f"En «{corta(t.carpeta_equipo)}» ya están: {', '.join(hechos)}.")
             sob = caja.addButton("Sobrescribir", QMessageBox.AcceptRole)
             nueva = caja.addButton("Crear versión nueva", QMessageBox.ActionRole)
             caja.addButton("Cancelar", QMessageBox.RejectRole)
             caja.exec()
             if caja.clickedButton() == nueva:
                 n = 2
-                while os.path.exists(os.path.join(t.carpeta_salida, f"{t.equipo} ({n})")):
+                base = t.carpeta_equipo
+                while os.path.exists(os.path.join(base, f"{t.equipo} ({n})")):
                     n += 1
-                t.equipo = f"{t.equipo} ({n})"
+                # la versión nueva va en una carpeta aparte dentro de la de resultados
+                t.carpeta_salida, t.subcarpeta, t.equipo = base, True, f"{t.equipo} ({n})"
             elif caja.clickedButton() != sob:
                 return
         self.en_segundo_plano(lambda prog: motor.generar(t, prog), self.generado)

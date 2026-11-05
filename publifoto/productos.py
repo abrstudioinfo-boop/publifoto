@@ -12,7 +12,7 @@ import numpy as np
 import pymupdf as fitz
 from PIL import Image
 
-from . import color, encuadre
+from . import color, encuadre, retoque
 from .analisis import abrir, girada, girar
 
 PLANTILLAS = os.path.join(os.path.dirname(__file__), "plantillas")
@@ -166,6 +166,7 @@ def foto_recortada(jugador, plantilla, tam, ajuste=None, recorte=False):
     if recorte and im.size != (jugador.puntos.ancho, jugador.puntos.alto):
         # el recorte debe tener el mismo tamaño que la foto arreglada
         im = im.resize((jugador.puntos.ancho, jugador.puntos.alto), Image.LANCZOS)
+    im = retoque.de_jugador(jugador, im)
     return encuadre.recortar(girar(im, giro), caja, tam)
 
 
