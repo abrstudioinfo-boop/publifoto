@@ -24,7 +24,8 @@ class Jugador:
     puntos: object = None
     tipo: str = "jugador"          # jugador | entrenador | equipo
     incluido: bool = True
-    ruta_recorte: str = None       # PNG sin fondo (solo cartas)
+    ruta_recorte: str = None       # PNG sin fondo del cliente (cartas; si no hay, se recorta solo)
+    carta: tuple = None            # (PNG recortado, colocación) para la carta (carta_auto.py)
     giro: float = 0.0              # grados (antihorario) para enderezarlo, en todos los productos
     tipo_manual: bool = False      # el operario ha elegido el tipo: los revisores no lo tocan
     tipo_seguro: bool = True
@@ -163,12 +164,6 @@ def revisar_encuadres(trabajo):
 def comprobar(trabajo):
     """Avisos antes de generar (lista de textos)."""
     avisos = []
-    if "cartas" in trabajo.productos:
-        sin = [j.id for j in trabajo.jugadores if j.incluido and j.tipo == "jugador" and not j.ruta_recorte]
-        if not trabajo.carpeta_recortes:
-            avisos.append("Para CARTAS hace falta la carpeta de fotos RECORTADAS (PNG sin fondo).")
-        elif sin:
-            avisos.append("Faltan recortes para: " + ", ".join(sin))
     return avisos
 
 
@@ -224,6 +219,8 @@ def generar(trabajo, progreso=print):
     for j in trabajo.jugadores:
         j.retocar = trabajo.retocar_piel
     productos.limpiar_cache()
+    if "cartas" in trabajo.productos:
+        _recortar_cartas(trabajo, progreso)
     n = hilos_disponibles()
     with ThreadPoolExecutor(max_workers=n, thread_name_prefix="foto") as fotos, \
             ThreadPoolExecutor(max_workers=len(trabajo.productos) or 1, thread_name_prefix="producto") as prods:
@@ -238,6 +235,25 @@ def generar(trabajo, progreso=print):
     trabajo.avisos = [a for a in trabajo.avisos if a.revisor not in ("salida", "presencia")] + \
         revision.revisar_salida(trabajo, salidas)
     return salidas
+
+
+def _recortar_cartas(trabajo, progreso):
+    """Recorta a los jugadores de las cartas antes de repartir el trabajo en hilos: el
+    modelo de retrato usa él solo todos los núcleos. Lo ya recortado queda en la caché."""
+    from . import carta_auto, revision
+    jug = jugadores_para(trabajo, productos.cargar_plantilla("cartas"))
+    trabajo.avisos = [a for a in trabajo.avisos if a.revisor != "recorte"]
+    try:
+        for i, j in enumerate(jug, 1):
+            progreso(f"Recortando para cartas {j.nombre} ({i}/{len(jug)})")
+            try:
+                j.carta = carta_auto.preparar(j)
+            except Exception as e:
+                j.carta = None
+                trabajo.avisos.append(revision.Aviso(j.id, "recorte", "error",
+                                                     f"No se ha podido recortar para la carta: {e}", "cartas"))
+    finally:
+        carta_auto.liberar_modelo()
 
 
 def _generar_producto(trabajo, id_, progreso, hilos):

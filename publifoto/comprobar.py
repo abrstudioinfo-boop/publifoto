@@ -147,10 +147,12 @@ def prueba_completa(salida, jugadores=7, entrenadores=1, escudo=None, club="CLUB
         nombre = f"PRUEBA_{i + 1:02d}"
         foto, recorte, puntos = _figura(i, entrenador=entrenador)
         foto.save(os.path.join(fotos, nombre + ".jpg"), quality=92)
-        recorte.save(os.path.join(recortes, nombre + ".png"))
+        if i:   # el primero sin recorte: el programa lo recorta solo (modelo de retrato)
+            recorte.save(os.path.join(recortes, nombre + ".png"))
         esperados[nombre + ".jpg"] = (puntos, "entrenador" if entrenador else "jugador")
         ruta = os.path.join(fotos, nombre + ".jpg")
-        for c in (_ruta_cache(ruta), _ruta_cache(ruta)[:-5] + ".png"):
+        for c in (_ruta_cache(ruta), _ruta_cache(ruta)[:-5] + ".png", _ruta_cache(ruta)[:-5] + "_carta1.png",
+                  _ruta_cache(ruta)[:-5] + "_carta1.json"):
             if os.path.exists(c):   # que se analice de nuevo en cada prueba
                 os.remove(c)
     t = motor.Trabajo(equipo="PRUEBA", carpeta_fotos=fotos, carpeta_salida=salida,

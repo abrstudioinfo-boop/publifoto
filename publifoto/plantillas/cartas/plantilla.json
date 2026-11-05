@@ -55,5 +55,18 @@
     "entrenador",
     "equipo"
   ],
-  "necesita_recorte": true
+  "necesita_recorte": true,
+  "colocacion": {
+    "caja": [
+      430,
+      600,
+      3350,
+      3189
+    ],
+    "pelo": 820,
+    "corte": 3189,
+    "centro": 1930.0,
+    "cabeza": 794,
+    "pantalon": 0.1
+  }
 }

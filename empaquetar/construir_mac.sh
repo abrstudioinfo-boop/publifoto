@@ -36,6 +36,10 @@ mkdir -p publifoto/recursos/modelos
 if [ ! -f publifoto/recursos/modelos/u2net_human_seg.onnx ]; then
     U2NET_HOME="$PWD/publifoto/recursos/modelos" python -c "from rembg import new_session; new_session('u2net_human_seg')"
 fi
+# modelo de retrato (recorte de las cartas, 973 MB)
+if [ ! -f publifoto/recursos/modelos/birefnet-portrait.onnx ]; then
+    U2NET_HOME="$PWD/publifoto/recursos/modelos" python -c "from rembg import new_session; new_session('birefnet-portrait')"
+fi
 # baja el modelo de cuerpo de MediaPipe y prueba todo sin ventana
 python -m publifoto.comprobar
 

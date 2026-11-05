@@ -25,6 +25,15 @@ Image.MAX_IMAGE_PIXELS = None
 HUECO = "Place Your Image Here"
 N_LUT = 17
 SOMBRA_MAX = 120   # px
+# sombra del jugador medida en las cartas aprobadas de Amposta (S11 B): cuánto queda del
+# fondo según la distancia al jugador (px). Se usa si el ejemplo de la plantilla no la trae.
+SOMBRA_APROBADA = [(0, 0.60), (5, 0.60), (10, 0.60), (20, 0.614), (30, 0.658), (40, 0.731), (60, 0.818),
+                   (80, 0.951), (100, 0.974), (120, 1.0)]
+
+
+def sombra_aprobada():
+    d, f = zip(*SOMBRA_APROBADA)
+    return np.interp(np.arange(SOMBRA_MAX + 1), d, f).astype(np.float32)
 
 
 def visibilidad(capas):
@@ -161,9 +170,15 @@ def main(ruta_tif, carpeta=None, id_="cartas"):
 
     # sombra que Photoshop pone alrededor del jugador: oscurecimiento según la
     # distancia al borde de la silueta, medido junto al jugador de ejemplo
-    base = aplicar_lut(debajo, lut)
     fuera = (ej_a < 0.002).astype(np.uint8)
     dist = cv2.distanceTransform(fuera, cv2.DIST_L2, 5)
+    # el fondo que va detrás del jugador (y el que se rehace donde estaba el de ejemplo)
+    # con su propio ajuste de color, aprendido en el fondo lejos del jugador: con el del
+    # jugador quedaba unos niveles más oscuro y morado, y se veía el contorno del ejemplo
+    zf = (mascara > 250) & (cubierto > 0.99) & (encima[:, :, 3] < 0.01) & (dist > SOMBRA_MAX + 20)
+    lut_fondo = ajustar_lut(debajo[zf], final[zf])
+    base = aplicar_lut(debajo, lut_fondo)
+    print("error medio del fondo:", round(float(np.abs(base[zf] - final[zf]).mean()), 2), "niveles de 255")
     perfil = np.ones(SOMBRA_MAX + 1, np.float32)
     lum_f, lum_b = final.mean(2), base.mean(2) + 1
     libre = (mascara > 250) & (encima[:, :, 3] < 0.01)
@@ -172,6 +187,9 @@ def main(ruta_tif, carpeta=None, id_="cartas"):
         if z.sum() > 50:
             perfil[d] = float(np.median(lum_f[z] / lum_b[z]))
     perfil = np.clip(np.maximum.accumulate(np.minimum(perfil, 1.0)), 0, 1)
+    if perfil[1] > 0.97:
+        # el jugador de ejemplo no lleva la sombra: la de las cartas aprobadas
+        perfil = sombra_aprobada()
     print("sombra: oscurece", round(1 - float(perfil[1]), 3), "junto al borde")
 
     # carta sin jugador: el resultado final con la zona del ejemplo rehecha
@@ -199,7 +217,20 @@ def main(ruta_tif, carpeta=None, id_="cartas"):
         "encuadre": {"margen": 0.1475, "alto_rel": 5.69, "centro": 0.0, "referencia": "mixto"},
         "impresion": ["tif"], "editable": "psd", "archivo": "CARTA {FOTO}",
         "excluir": ["entrenador", "equipo"], "necesita_recorte": True,
+        # sitio del jugador (la sesión CARTAS, plantilla de 3780 x 5315), a la escala de esta
+        "colocacion": _colocacion(W, H),
     })
+
+
+def _colocacion(W, H):
+    from ..carta_auto import COLOCACION
+    fx, fy = W / 3780, H / 5315
+    c = dict(COLOCACION)
+    x0, y0, x1, y1 = c["caja"]
+    c["caja"] = [round(x0 * fx), round(y0 * fy), round(x1 * fx), round(y1 * fy)]
+    c["pelo"], c["corte"] = round(c["pelo"] * fy), round(c["corte"] * fy)
+    c["centro"], c["cabeza"] = c["centro"] * fx, round(c["cabeza"] * fy)
+    return c
 
 
 if __name__ == "__main__":

@@ -7,8 +7,11 @@ calendarios de pared y de sobremesa, 15×20 con logo) **sin Adobe**.
 
 1. Doble clic en `Publifoto.bat`.
 2. Arrastra la carpeta de fotos ARREGLADAS. El programa pide el nombre del equipo.
-3. Para CARTAS, arrastra también la carpeta RECORTADAS (PNG sin fondo, con el
-   mismo nombre de archivo que la foto arreglada).
+3. CARTAS: el programa recorta solo a cada jugador desde la foto arreglada (modelo de
+   retrato BiRefNet, local) y lo coloca como la sesión CARTAS. Si ya tienes los recortes
+   (PNG sin fondo, mismo nombre que la foto), arrastra la carpeta RECORTADAS: se usa tu
+   recorte para el cuerpo y el modelo para el pelo. Recortar tarda 1-2 min por jugador
+   la primera vez; después queda guardado.
 4. Revisa la clasificación (jugador / entrenador / foto de equipo) y marca los productos.
    Elige el **escudo del club** (la primera vez, «Añadir logos…» con la carpeta de escudos:
    el nombre de cada archivo es el del club). Sale en 15 x 20, calendario de pared y
@@ -31,7 +34,7 @@ Resultado:
 
 | Producto | Impresión | Editable | Quién sale |
 |---|---|---|---|
-| CARTAS | TIFF CMYK FOGRA39, una por jugador | PSD (fondo, jugador, logo y textos) | jugadores, necesita recorte |
+| CARTAS | TIFF CMYK FOGRA39, una por jugador | PSD (fondo, jugador, logo y textos) | jugadores; recorte automático (o RECORTADAS) |
 | IMANES | PDF + TIFF CMYK FOGRA39, 12 por hoja (franja en negro enriquecido, línea de corte y textos solo en negro) | AI por capas (se abre en Illustrator) | jugadores |
 | LLAVEROS | JPG RGB, 5 por hoja y repetidos | PSD por capas | jugadores |
 | CALENDARIOS PARED | TIFF CMYK, uno por persona | un PSD con una capa por persona | jugadores y entrenadores |

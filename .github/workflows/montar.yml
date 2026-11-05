@@ -20,7 +20,7 @@ jobs:
           - runner: macos-15-intel
             nombre: Publifoto-Mac-Intel
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       # el Python oficial de python.org funciona desde macOS 11; el de setup-python se
@@ -41,7 +41,7 @@ jobs:
 
   windows:
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

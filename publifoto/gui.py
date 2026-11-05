@@ -69,6 +69,21 @@ class Tarea(QObject):
             self.error.emit(traceback.format_exc())
 
 
+class SinRueda(QComboBox):
+    """Desplegable que no cambia con la rueda del ratón al pasar por encima (al bajar por
+    la lista de jugadores se cambiaba el tipo sin querer). Con clic sí."""
+
+    def __init__(self, *a):
+        super().__init__(*a)
+        self.setFocusPolicy(Qt.StrongFocus)
+
+    def wheelEvent(self, e):
+        if self.hasFocus() and self.view().isVisible():
+            super().wheelEvent(e)
+        else:
+            e.ignore()
+
+
 class ZonaArrastre(QLabel):
     soltada = Signal(str)
 
@@ -264,6 +279,9 @@ class Revision(QDialog):
             self.lbl_avisos.setText("No hay nadie en este producto." if not self.jug else "")
             return
         p = self.plantilla
+        if p["id"] == "cartas":
+            self.pintar_carta(j, p)
+            return
         recorte = p.get("necesita_recorte") and j.ruta_recorte
         im = miniatura(j.ruta_recorte if recorte else j.ruta)
         f = im.width / j.puntos.ancho
@@ -303,6 +321,42 @@ class Revision(QDialog):
             fondo.alpha_composite(vista)
             vista = fondo
         self.vista.setPixmap(a_pixmap(vista))
+
+    def pintar_carta(self, j, p):
+        """Cartas: el jugador recortado en la caja de la foto de la carta, como saldrá."""
+        from . import carta_auto
+        self.b_auto.hide()
+        self.lbl_giro.setText("")
+        n = len(j.retoque)
+        self.b_piel.blockSignals(True)
+        self.b_piel.setVisible(bool(n) and self.t.retocar_piel)
+        self.b_piel.setChecked(not j.sin_retoque)
+        self.b_piel.blockSignals(False)
+        hecho = j.carta or carta_auto.en_cache(j)
+        avisos = ["⚠ " + a.texto for a in self.avisos_de(j)]
+        if not hecho:
+            avisos.insert(0, "El recorte de la carta se hace al generar; después aquí se ve cómo "
+                             "queda y se puede ajustar.")
+            self.lbl_avisos.setText("\n".join(avisos))
+            im = miniatura(j.ruta).copy()
+            im.thumbnail((600, 600))
+            self.vista.setPixmap(a_pixmap(im))
+            return
+        png, med = hecho
+        self.lbl_avisos.setText("\n".join(avisos))
+        im = miniatura(png)
+        f = im.width / j.puntos.ancho
+        col = p.get("colocacion", carta_auto.COLOCACION)
+        # la colocación a la escala de la miniatura y de la vista (un cuarto de la carta)
+        x0, y0, x1, y1 = col["caja"]
+        red = 0.25
+        col_v = dict(col, caja=[0, 0, int((x1 - x0) * red), int((y1 - y0) * red)],
+                     centro=(col["centro"] - x0) * red, pelo=(col["pelo"] - y0) * red)
+        med_v = dict(med, s=med["s"] * red / f, mid=med["mid"] * f, top=med["top"] * f)
+        vista = carta_auto.colocar(im, med_v, col_v, self.t.ajustes.get(p["id"], {}).get(j.id))
+        fondo = Image.new("RGBA", vista.size, (243, 237, 241, 255))
+        fondo.alpha_composite(vista)
+        self.vista.setPixmap(a_pixmap(fondo))
 
     def keyPressEvent(self, e):
         teclas = {Qt.Key_Up: (0, 0.01, 1), Qt.Key_Down: (0, -0.01, 1), Qt.Key_Left: (0.01, 0, 1),
@@ -517,7 +571,8 @@ class Ventana(QMainWindow):
         zonas.setSpacing(12)
         self.zona = ZonaArrastre("Carpeta ARREGLADAS", "Arrástrala aquí o haz clic para elegirla")
         self.zona.soltada.connect(self.cargar_fotos)
-        self.zona_rec = ZonaArrastre("Carpeta RECORTADAS", "Solo para cartas · PNG sin fondo")
+        self.zona_rec = ZonaArrastre("Carpeta RECORTADAS (opcional)",
+                                     "Las cartas se recortan solas · si tienes PNG sin fondo, arrástralos aquí")
         self.zona_rec.soltada.connect(self.cargar_recortes)
         zonas.addWidget(self.zona, 3)
         zonas.addWidget(self.zona_rec, 2)
@@ -987,7 +1042,7 @@ class Ventana(QMainWindow):
             cb.setChecked(j.incluido)
             cb.toggled.connect(lambda s, j=j: (setattr(j, "incluido", s), self.pintar_avisos()))
             v.addWidget(cb)
-            tipo = QComboBox()
+            tipo = SinRueda()
             for k, txt in TIPOS.items():
                 tipo.addItem(txt, k)
             tipo.setCurrentIndex(list(TIPOS).index(j.tipo))

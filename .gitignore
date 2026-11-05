@@ -9,7 +9,7 @@ PRUEBA_GIRO/
 *.cr2
 *.NEF
 *.publifoto
-# Modelo de silueta (176 MB, más que el límite de GitHub): el montaje lo baja solo
+# Modelos (silueta 176 MB, retrato 973 MB: más que el límite de GitHub): el montaje los baja solos
 publifoto/recursos/modelos/*.onnx
 # Montajes y entornos
 build/

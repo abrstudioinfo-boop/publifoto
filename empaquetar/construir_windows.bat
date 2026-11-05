@@ -12,6 +12,15 @@ if not exist publifoto\recursos\modelos\u2net_human_seg.onnx (
         python -c "from rembg import new_session; new_session('u2net_human_seg')" || exit /b 1
     )
 )
+rem modelo de retrato (recorte de las cartas, 973 MB)
+if not exist publifoto\recursos\modelos\birefnet-portrait.onnx (
+    if exist "%USERPROFILE%\.rembg\models\birefnet-portrait\birefnet-portrait.onnx" (
+        copy "%USERPROFILE%\.rembg\models\birefnet-portrait\birefnet-portrait.onnx" publifoto\recursos\modelos\ >nul
+    ) else (
+        set U2NET_HOME=%CD%\publifoto\recursos\modelos
+        python -c "from rembg import new_session; new_session('birefnet-portrait')" || exit /b 1
+    )
+)
 python -m publifoto.comprobar || exit /b 1
 pyinstaller --noconfirm --clean --distpath dist --workpath build empaquetar\publifoto.spec || exit /b 1
 rem el .exe no tiene consola: el informe de la prueba queda en comprobar.txt
