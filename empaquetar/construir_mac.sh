@@ -40,6 +40,13 @@ fi
 if [ ! -f publifoto/recursos/modelos/birefnet-portrait.onnx ]; then
     U2NET_HOME="$PWD/publifoto/recursos/modelos" python -c "from rembg import new_session; new_session('birefnet-portrait')"
 fi
+# rembg los baja a modelos/models/<nombre>/: se dejan sueltos, que es donde los busca el programa
+for m in u2net_human_seg birefnet-portrait; do
+    if [ -f "publifoto/recursos/modelos/models/$m/$m.onnx" ]; then
+        mv "publifoto/recursos/modelos/models/$m/$m.onnx" publifoto/recursos/modelos/
+    fi
+done
+rm -rf publifoto/recursos/modelos/models
 # baja el modelo de cuerpo de MediaPipe y prueba todo sin ventana
 python -m publifoto.comprobar
 

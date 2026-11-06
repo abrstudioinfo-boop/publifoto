@@ -176,11 +176,16 @@ _retrato = None
 
 
 def ruta_modelo():
-    """El modelo BiRefNet de retrato: dentro del programa, o el que deja rembg en ~/.rembg."""
-    dentro = os.path.join(os.path.dirname(__file__), "recursos", "modelos", MODELO_RETRATO)
-    if os.path.exists(dentro):
-        return dentro
-    return os.path.join(os.path.expanduser("~"), ".rembg", "models", "birefnet-portrait", MODELO_RETRATO)
+    """El modelo BiRefNet de retrato: dentro del programa, o el que deja rembg en ~/.rembg.
+    rembg lo baja a <carpeta>/models/birefnet-portrait/, así que se mira también ahí."""
+    modelos = os.path.join(os.path.dirname(__file__), "recursos", "modelos")
+    casa = os.path.join(os.path.expanduser("~"), ".rembg")
+    for base in (modelos, casa):
+        for ruta in (os.path.join(base, MODELO_RETRATO),
+                     os.path.join(base, "models", "birefnet-portrait", MODELO_RETRATO)):
+            if os.path.exists(ruta):
+                return ruta
+    return os.path.join(casa, "models", "birefnet-portrait", MODELO_RETRATO)
 
 
 def _sesion_retrato():

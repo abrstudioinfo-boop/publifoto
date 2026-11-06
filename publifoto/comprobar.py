@@ -32,11 +32,20 @@ def comprobar():
     paso("perfil FOGRA39", lambda: color.a_cmyk(Image.new("RGB", (8, 8), (200, 30, 30))))
     gris = np.full((640, 480, 3), 128, np.uint8)
     paso("modelo de silueta (rembg)", lambda: analisis._rembg())
+    paso("modelo de retrato (cartas)", _retrato)
     paso("modelos de cara y cuerpo (MediaPipe)", lambda: _mediapipe(gris))
     paso("carpeta de trabajo", lambda: os.makedirs(analisis.carpeta_cache(), exist_ok=True))
     paso("retoque de piel", _retoque)
     print("TODO BIEN" if not fallos else f"FALLAN {len(fallos)}: " + ", ".join(fallos))
     return not fallos
+
+
+def _retrato():
+    """El modelo del recorte de las cartas tiene que estar (pesa casi 1 GB; aquí no se carga)."""
+    from . import carta_auto
+    ruta = carta_auto.ruta_modelo()
+    if not os.path.exists(ruta) or os.path.getsize(ruta) < 100_000_000:
+        raise RuntimeError("no está " + ruta)
 
 
 def _retoque():

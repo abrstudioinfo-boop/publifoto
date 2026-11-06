@@ -21,7 +21,8 @@ def _rembg():
     if _sesion is None:
         # en el programa instalado el modelo va dentro: no se descarga nada
         modelos = os.path.join(os.path.dirname(__file__), "recursos", "modelos")
-        if os.path.exists(os.path.join(modelos, "u2net_human_seg.onnx")):
+        if any(os.path.exists(os.path.join(modelos, *r, "u2net_human_seg.onnx"))
+               for r in ((), ("models", "u2net_human_seg"))):
             os.environ["U2NET_HOME"] = modelos
         from rembg import new_session
         _sesion = new_session("u2net_human_seg")

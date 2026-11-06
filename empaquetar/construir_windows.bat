@@ -21,6 +21,11 @@ if not exist publifoto\recursos\modelos\birefnet-portrait.onnx (
         python -c "from rembg import new_session; new_session('birefnet-portrait')" || exit /b 1
     )
 )
+rem rembg los baja a modelos\models\: se dejan sueltos, que es donde los busca el programa
+for %%m in (u2net_human_seg birefnet-portrait) do (
+    if exist publifoto\recursos\modelos\models\%%m\%%m.onnx move /y publifoto\recursos\modelos\models\%%m\%%m.onnx publifoto\recursos\modelos\ >nul
+)
+if exist publifoto\recursos\modelos\models rmdir /s /q publifoto\recursos\modelos\models
 python -m publifoto.comprobar || exit /b 1
 pyinstaller --noconfirm --clean --distpath dist --workpath build empaquetar\publifoto.spec || exit /b 1
 rem el .exe no tiene consola: el informe de la prueba queda en comprobar.txt
