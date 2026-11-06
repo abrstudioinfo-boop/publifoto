@@ -90,7 +90,7 @@ desde los originales de Adobe (no hace falta Adobe para leerlos):
 
 ```
 python -m publifoto.herramientas.preparar_plantillas "<carpeta con IMANS FUTBOL.ai, CAL PARET.tif...>"
-python -m publifoto.herramientas.preparar_carta "<...>/AMPOSTAPLANTILLA2026.tif"
+python -m publifoto.herramientas.preparar_carta "<...>/AMPOSTAPLANTILLA2026.tif" "<...>/S11 B CARTAS.tif"
 ```
 
 `herramientas/tiff_capas.py` lee las capas de los TIFF de Photoshop sin Adobe.

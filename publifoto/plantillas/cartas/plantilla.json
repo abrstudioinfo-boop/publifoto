@@ -13,7 +13,11 @@
   "mascara": "mascara.png",
   "encima": "encima.png",
   "lut": "lut.npy",
-  "sombra": "sombra.npy",
+  "sombra": {
+    "crece": 25,
+    "difumina": 30,
+    "fuerza": 0.42
+  },
   "capas_encima": [
     "<Path>",
     "separados",
@@ -67,6 +71,6 @@
     "corte": 3189,
     "centro": 1930.0,
     "cabeza": 794,
-    "pantalon": 0.1
+    "cintura": 0.97
   }
 }

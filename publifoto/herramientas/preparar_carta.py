@@ -25,15 +25,10 @@ Image.MAX_IMAGE_PIXELS = None
 HUECO = "Place Your Image Here"
 N_LUT = 17
 SOMBRA_MAX = 120   # px
-# sombra del jugador medida en las cartas aprobadas de Amposta (S11 B): cuánto queda del
-# fondo según la distancia al jugador (px). Se usa si el ejemplo de la plantilla no la trae.
-SOMBRA_APROBADA = [(0, 0.60), (5, 0.60), (10, 0.60), (20, 0.614), (30, 0.658), (40, 0.731), (60, 0.818),
-                   (80, 0.951), (100, 0.974), (120, 1.0)]
-
-
-def sombra_aprobada():
-    d, f = zip(*SOMBRA_APROBADA)
-    return np.interp(np.arange(SOMBRA_MAX + 1), d, f).astype(np.float32)
+# sombra del jugador como la de Photoshop: la silueta crecida (px) y difuminada (sigma, px),
+# oscureciendo el fondo hasta «fuerza». Comparada con la carta aprobada de Amposta (S11 B),
+# un poco más suave a petición del usuario.
+SOMBRA = {"crece": 25, "difumina": 30, "fuerza": 0.42}
 
 
 def visibilidad(capas):
@@ -104,10 +99,74 @@ def aplicar_lut(rgb, lut):
     return out
 
 
-def main(ruta_tif, carpeta=None, id_="cartas"):
+def _linea(final, debajo, encima, corte, margen=40):
+    """Añade a «encima» la línea dorada que corta al jugador (cerca de la fila del corte)."""
+    y0 = max(0, corte - margen)
+    z = final[y0:corte + margen]
+    oro = (z[..., 0] > 120) & (z[..., 0] - z[..., 2] > 50)
+    filas = np.nonzero(oro.mean(1) > 0.3)[0]
+    if not len(filas):
+        return
+    a, b = y0 + filas.min(), y0 + filas.max()
+    centro = (a + b) // 2
+    # el tramo seguido más largo (a los lados la fila toca el marco dorado)
+    cols = np.nonzero(oro[centro - y0])[0]
+    tramos = np.split(cols, np.nonzero(np.diff(cols) > 5)[0] + 1)
+    t = max(tramos, key=len)
+    x0, x1 = t.min(), t.max() + 1
+    # en las filas del borde, cuánto tapa la línea (medido contra lo que hay debajo)
+    nucleo = final[centro, x0:x1]
+    for y in range(a - 3, b + 4):
+        if a <= y <= b:
+            al = np.ones(x1 - x0, np.float32)
+        else:
+            num = (final[y, x0:x1] - debajo[y, x0:x1]).sum(1)
+            den = (nucleo - debajo[y, x0:x1]).sum(1)
+            ok = np.abs(den) > 30
+            if not ok.any():
+                continue
+            al = np.full(x1 - x0, np.clip(np.median(num[ok] / den[ok]), 0, 1), np.float32)
+        col = final[y, x0:x1] if a <= y <= b else nucleo
+        e = encima[y, x0:x1]
+        e[:, :3] = col * al[:, None] + e[:, :3] * (1 - al[:, None])
+        e[:, 3] = al + e[:, 3] * (1 - al)
+    print("línea dorada: filas", a, "a", b, "columnas", x0, "a", x1)
+
+
+def _color_aprobado(final, ruta_aprobada, mascara, ej_a):
+    """Ajuste de color (afín) que lleva la imagen de la plantilla a una carta aprobada del
+    mismo diseño: Photoshop evalúa los ajustes en CMYK al pasarla y el gris sale neutro, no
+    morado. Se aprende en el fondo, lejos de los dos jugadores; vale también para el jugador."""
+    from ..color import a_rgb
+    ap = np.asarray(a_rgb(Image.open(ruta_aprobada)), np.float32)
+    if ap.shape != final.shape:
+        raise ValueError("La carta aprobada no tiene el tamaño de la plantilla.")
+    # el jugador de la carta aprobada: lo que cambia mucho respecto a la plantilla
+    sil = ((np.abs(ap - final).max(2) > 45) & (mascara > 128)).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(sil)
+    if n > 1:
+        sil = (lab == 1 + np.argmax(st[1:, 4])).astype(np.uint8)
+    sil = cv2.morphologyEx(sil, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
+    jugadores = np.maximum(sil, (ej_a > 0.002).astype(np.uint8))
+    lejos = cv2.distanceTransform(1 - jugadores, cv2.DIST_L2, 5) > 150
+    a, b = final[lejos][::5], ap[lejos][::5]
+    F = np.column_stack([a / 255, np.ones(len(a))])
+    M = np.linalg.lstsq(F, b, rcond=None)[0]
+    print("color de la carta aprobada: diferencia", round(float(np.abs(a - b).mean()), 2), "->",
+          round(float(np.abs(F @ M - b).mean()), 2), "niveles de 255")
+    return M
+
+
+def _afin(rgb, M):
+    return np.clip(rgb / 255 @ M[:3] + M[3], 0, 255).astype(np.float32)
+
+
+def main(ruta_tif, carpeta=None, id_="cartas", aprobada=None):
     """ruta_tif: el TIFF de la carta con capas y un jugador de ejemplo; carpeta: dónde
     se guarda la plantilla (por defecto, dentro del programa). Sirve para cualquier
-    carta hecha con el mismo diseño (otros colores, otro club, otro año)."""
+    carta hecha con el mismo diseño (otros colores, otro club, otro año).
+    aprobada: una carta final ya aprobada de este diseño (CMYK); si se da, la plantilla
+    toma su color."""
     (W, H), modo, capas = leer_capas(ruta_tif)
     vis = visibilidad(capas)
     k = next((i for i, c in enumerate(capas) if c["nombre"] == HUECO), None)
@@ -143,6 +202,9 @@ def main(ruta_tif, carpeta=None, id_="cartas"):
     ej[t:b, l:r] = np.asarray(hueco["imagen"], np.float32)
     ej_a = ej[:, :, 3] / 255 * mascara / 255
     antes = ej[:, :, :3] * ej_a[..., None] + debajo * (1 - ej_a[..., None])
+    afin = _color_aprobado(final, aprobada, mascara, ej_a) if aprobada else None
+    if afin is not None:
+        final = _afin(final, afin)
 
     # capas por encima con píxeles
     encima = np.zeros((H, W, 4), np.float32)
@@ -162,14 +224,19 @@ def main(ruta_tif, carpeta=None, id_="cartas"):
             encima[:, :, :3] = lienzo * a[..., None] + encima[:, :, :3] * (1 - a[..., None])
             encima[:, :, 3] = a + encima[:, :, 3] * (1 - a)
 
+    if afin is not None:
+        encima[:, :, :3] = _afin(encima[:, :, :3], afin)
+
+    # la línea dorada bajo el jugador es una forma sin píxeles que Photoshop pinta por encima
+    # del jugador: se saca de la imagen final y va con lo de encima
+    _linea(final, debajo, encima, _colocacion(W, H)["corte"])
+
     # aprender el ajuste donde el resultado no lleva nada encima
     zona = (mascara > 250) & (cubierto > 0.99) & (encima[:, :, 3] < 0.01)
     lut = ajustar_lut(antes[zona], final[zona])
     error = np.abs(aplicar_lut(antes[zona][None], lut)[0] - final[zona]).mean()
     print("error medio del ajuste de color:", round(float(error), 2), "niveles de 255")
 
-    # sombra que Photoshop pone alrededor del jugador: oscurecimiento según la
-    # distancia al borde de la silueta, medido junto al jugador de ejemplo
     fuera = (ej_a < 0.002).astype(np.uint8)
     dist = cv2.distanceTransform(fuera, cv2.DIST_L2, 5)
     # el fondo que va detrás del jugador (y el que se rehace donde estaba el de ejemplo)
@@ -179,19 +246,6 @@ def main(ruta_tif, carpeta=None, id_="cartas"):
     lut_fondo = ajustar_lut(debajo[zf], final[zf])
     base = aplicar_lut(debajo, lut_fondo)
     print("error medio del fondo:", round(float(np.abs(base[zf] - final[zf]).mean()), 2), "niveles de 255")
-    perfil = np.ones(SOMBRA_MAX + 1, np.float32)
-    lum_f, lum_b = final.mean(2), base.mean(2) + 1
-    libre = (mascara > 250) & (encima[:, :, 3] < 0.01)
-    for d in range(SOMBRA_MAX + 1):
-        z = libre & (dist > d - 0.5) & (dist <= d + 0.5)
-        if z.sum() > 50:
-            perfil[d] = float(np.median(lum_f[z] / lum_b[z]))
-    perfil = np.clip(np.maximum.accumulate(np.minimum(perfil, 1.0)), 0, 1)
-    if perfil[1] > 0.97:
-        # el jugador de ejemplo no lleva la sombra: la de las cartas aprobadas
-        perfil = sombra_aprobada()
-    print("sombra: oscurece", round(1 - float(perfil[1]), 3), "junto al borde")
-
     # carta sin jugador: el resultado final con la zona del ejemplo rehecha
     sin = final.copy()
     rehacer = (dist <= SOMBRA_MAX) & (mascara > 0)
@@ -207,11 +261,10 @@ def main(ruta_tif, carpeta=None, id_="cartas"):
     Image.fromarray(np.dstack([np.clip(encima[:, :, :3], 0, 255), encima[:, :, 3:] * 255]).astype(np.uint8),
                     "RGBA").save(os.path.join(carpeta, "encima.png"))
     np.save(os.path.join(carpeta, "lut.npy"), lut)
-    np.save(os.path.join(carpeta, "sombra.npy"), perfil)
     _guardar(carpeta, {
         "id": id_, "nombre": "CARTAS", "tipo": "carta", "color": "CMYK", "lienzo": [W, H], "ppp": 300,
         "fondo": "fondo.png", "debajo": "debajo.png", "mascara": "mascara.png", "encima": "encima.png",
-        "lut": "lut.npy", "sombra": "sombra.npy", "capas_encima": lista_encima,
+        "lut": "lut.npy", "sombra": SOMBRA, "capas_encima": lista_encima,
         "huecos": [{"rect": [0, 0, W, H]}], "jugadores_por_hoja": 1,
         # medido en las cartas aprobadas: pelo al 14,75 % del alto de la carta
         "encuadre": {"margen": 0.1475, "alto_rel": 5.69, "centro": 0.0, "referencia": "mixto"},
@@ -234,4 +287,4 @@ def _colocacion(W, H):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(sys.argv[1], aprobada=sys.argv[2] if len(sys.argv) > 2 else None)

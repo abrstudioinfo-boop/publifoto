@@ -2,11 +2,11 @@
 igual que la sesión CARTAS (sus scripts prep_waist, metrics, pose, hem y bire_matte).
 
 - Colocación (colocar): se mide en la silueta recortada lo alto del pelo, el cuello, el
-  centro de la cabeza y del tronco, los hombros y las caderas (MediaPipe) y el bajo de
-  la camiseta. El corte de abajo de la carta queda entre el bajo de la camiseta y un
-  poco de pantalón (la regla que eligió el usuario) y la cabeza a la altura del pelo de
-  la plantilla. Los números de la carta (caja de la foto, pelo, corte, centro) están en
-  la plantilla, en "colocacion".
+  centro de la cabeza y del tronco, y los hombros y las caderas (MediaPipe). Todos con el
+  pelo a la misma altura y cortados por la cintura, donde empieza el pantalón (como la
+  carta aprobada de S11 B): a cada uno se le da el tamaño para que su cintura caiga en la
+  línea dorada. Los números de la carta (caja de la foto, pelo, corte, centro, cintura)
+  están en la plantilla, en "colocacion".
 - Recorte (recortar): el modelo de retrato BiRefNet (local, sin internet) en la foto
   arreglada, y el pelo como la sesión: alfa fino con el filtro guiado y color de los
   mechones sin el tono de la pared (bire_matte).
@@ -23,10 +23,11 @@ from .analisis import abrir, _ruta_cache
 
 Image.MAX_IMAGE_PIXELS = None
 VERSION = 1
+REGLA = 2   # regla de colocación: al cambiarla se vuelve a medir sin volver a recortar
 
 # los de la sesión CARTAS para la plantilla de 2026 (3780 x 5315)
 COLOCACION = {"caja": [430, 600, 3350, 3189], "pelo": 820, "corte": 3189, "centro": 1930.0, "cabeza": 794,
-              "pantalon": 0.10}
+              "cintura": 0.97}
 
 
 # --- medidas de la silueta (metrics.py de la sesión) --------------------------
@@ -92,39 +93,6 @@ def puntos_cuerpo(rgba):
     return dict(ls=g(11), rs=g(12), lh=g(23), rh=g(24), lk=g(25), rk=g(26), le=g(13), re=g(14), lw=g(15), rw=g(16))
 
 
-# --- bajo de la camiseta (hem.py de la sesión) ---------------------------------
-
-def bajo_camiseta(rgba, sy, hy):
-    """Primera fila (desde 0,95 de las caderas hacia abajo) en la que el dibujo de claros y
-    oscuros deja de parecerse al de la camiseta de encima. y en px o None."""
-    import cv2
-    a = rgba[..., 3] > 200
-    L = cv2.cvtColor(rgba[..., :3], cv2.COLOR_RGB2LAB)[..., 0].astype(np.float32)
-    L = cv2.GaussianBlur(L, (0, 0), 3)
-    th = sy + 0.95 * (hy - sy)
-    t = hy - sy
-    y0 = int(th)
-    y1 = int(min(rgba.shape[0] - 5, sy + 1.9 * t))
-    xs = np.where(a[y0])[0]
-    if len(xs) < 50:
-        return None
-    x0, x1 = xs[0] + int(0.12 * (xs[-1] - xs[0])), xs[-1] - int(0.12 * (xs[-1] - xs[0]))
-    ref = L[y0 - int(0.06 * t):y0, x0:x1].mean(0)
-
-    def corr(v):
-        v = v - v.mean()
-        r = ref - ref.mean()
-        return float((v * r).sum() / np.sqrt((v * v).sum() * (r * r).sum() + 1e-6))
-    cs = np.array([corr(L[y, x0:x1]) for y in range(y0, y1)])
-    k = 9
-    cs = np.convolve(cs, np.ones(k) / k, 'same')
-    run = max(6, int(0.03 * t))
-    for i in range(len(cs) - run):
-        if np.all(cs[i:i + run] < 0.45):
-            return y0 + i
-    return None
-
-
 # --- colocación (prep_waist.py de la sesión) -----------------------------------
 
 def medir_colocacion(rgba, col=None):
@@ -138,15 +106,11 @@ def medir_colocacion(rgba, col=None):
     if lm:
         sy = (lm['ls'][1] + lm['rs'][1]) / 2
         hy = (lm['lh'][1] + lm['rh'][1]) / 2
-        h = bajo_camiseta(arr, sy, hy)
-        wf = (h - sy) / (hy - sy) if h else None
-        if wf is None or wf < 0.95 or wf > 1.85:
-            wf, como = 1.2, 'pose-default'
-        else:
-            como = 'hem'
-        cutf = 0.5 * (1.04 + wf + col.get("pantalon", 0.10))   # entre las dos muestras que comparó el usuario
-        waist = sy + cutf * (hy - sy)
+        # cintura = donde empieza el pantalón: a 0,97 de hombros a caderas (medido en la
+        # carta aprobada; la búsqueda del bajo de la camiseta fallaba en varios jugadores)
+        waist = sy + col.get("cintura", 0.97) * (hy - sy)
         s = (corte - tope) / (waist - m['top'])
+        como = 'pose'
     else:
         s = col["cabeza"] / m['headlen']
         como = 'head'
@@ -325,7 +289,13 @@ def en_cache(jugador):
             d = json.load(f)
     except (OSError, ValueError):
         return None
-    return (png, d["colocacion"]) if d.get("huella") == _huella(jugador) else None
+    if d.get("huella") != _huella(jugador):
+        return None
+    if d.get("regla") != REGLA:
+        d["colocacion"], d["regla"] = medir_colocacion(Image.open(png).convert("RGBA")), REGLA
+        with open(js, "w") as f:
+            json.dump(d, f)
+    return png, d["colocacion"]
 
 
 def rutas_cache(jugador):
@@ -360,5 +330,5 @@ def preparar(jugador, cache=True):
     os.makedirs(os.path.dirname(png), exist_ok=True)
     Image.fromarray(final).save(png)
     with open(js, "w") as f:
-        json.dump({"huella": huella, "colocacion": med}, f)
+        json.dump({"huella": huella, "colocacion": med, "regla": REGLA}, f)
     return png, med

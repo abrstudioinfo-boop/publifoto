@@ -28,7 +28,7 @@ def _plantilla_px(p):
             mascara=np.asarray(Image.open(os.path.join(c, p["mascara"])), np.float32) / 255,
             encima=np.asarray(Image.open(os.path.join(c, p["encima"])), np.float32),
             lut=np.load(os.path.join(c, p["lut"])),
-            sombra=np.load(os.path.join(c, p["sombra"])) if p.get("sombra") else None,
+            sombra=p["sombra"] if isinstance(p.get("sombra"), dict) else None,
         )
     return _cache[clave]
 
@@ -51,7 +51,7 @@ def componer(p, jugador, ajuste=None):
     capas = [("Fondo", Image.fromarray(t["fondo"].astype(np.uint8)), None, 0, 0)]
     if len(ys):
         sombra = t["sombra"]
-        m = len(sombra) - 1 if sombra is not None else 4
+        m = int(sombra["crece"] + 3 * sombra["difumina"]) if sombra else 4
         # zona que se rehace: el jugador y su sombra alrededor (la de Photoshop)
         y0, y1 = max(0, ys.min() - m), min(H, ys.max() + 1 + m)
         x0, x1 = max(0, xs.min() - m), min(W, xs.max() + 1 + m)
@@ -66,9 +66,11 @@ def componer(p, jugador, ajuste=None):
         bajo = np.where(ea > 0.98, t["debajo"][sl], np.clip(limpio, 0, 255))
         oscuro = None
         if sombra is not None:
-            fuera = (alfa[sl] < 0.002).astype(np.uint8)
-            d = cv2.distanceTransform(fuera, cv2.DIST_L2, 5)
-            f = sombra[np.clip(np.round(d), 0, m).astype(int)]
+            r = int(sombra["crece"])
+            crecido = cv2.dilate(alfa[sl], cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1)))
+            f = 1 - sombra["fuerza"] * cv2.GaussianBlur(crecido, (0, 0), sombra["difumina"])
+            # el jugador sigue por debajo de la línea dorada: ahí no cae sombra
+            f[max(0, col["corte"] - y0):] = 1
             bajo = bajo * f[..., None]
             oscuro = (1 - f) * t["mascara"][sl]       # para la capa «Sombra» del PSD
         comp = jug * a + bajo * (1 - a)
