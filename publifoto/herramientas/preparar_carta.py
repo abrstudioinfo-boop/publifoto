@@ -28,7 +28,7 @@ SOMBRA_MAX = 120   # px
 # sombra del jugador como la de Photoshop: la silueta crecida (px) y difuminada (sigma, px),
 # oscureciendo el fondo hasta «fuerza». Comparada con la carta aprobada de Amposta (S11 B),
 # un poco más suave a petición del usuario.
-SOMBRA = {"crece": 25, "difumina": 30, "fuerza": 0.42}
+SOMBRA = {"crece": 25, "difumina": 30, "fuerza": 0.33}
 # letra del nombre del club cuando se cambia: la del diseño (DIN Pro Condensed Bold) si está
 # en el ordenador; si no, Bebas Neue (libre, va con el programa)
 FUENTES_CLUB = ["DINPro-CondensedBold.otf", "DINPro-CondBold.otf", "BebasNeue-Regular.ttf"]
@@ -161,6 +161,85 @@ def _rellenar(img, mask, caja):
     pred = np.clip(pred + num / np.maximum(den, 1e-2), 0, 255)
     suave = np.maximum(cv2.GaussianBlur(m.astype(np.float32), (0, 0), 1.5), m)[..., None]
     return np.clip(pred * suave + z * (1 - suave), 0, 255)
+
+
+def _erf(x):
+    # Abramowitz y Stegun 7.1.26 (error < 1,5e-7): sin depender de scipy
+    t = 1 / (1 + 0.3275911 * np.abs(x))
+    y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t \
+        * np.exp(-x * x)
+    return np.sign(x) * y
+
+
+def _sombra_bajo_linea(fondo, linea_capa, texto_alfa):
+    """Bajo la línea dorada la plantilla trae la sombra del jugador de ejemplo (un
+    rectángulo oscuro y difuminado, en el centro). El jugador tiene que salir de la línea
+    sin sombra debajo: se mide esa sombra (rectángulo difuminado ajustado a lo que oscurece
+    respecto al recuadro del nombre más abajo, donde no llega) y se quita. Las letras del
+    nombre van por encima de la sombra y no se tocan. Cambia fondo y devuelve cuánto
+    oscurecía (0 si no había)."""
+    ys, xs = np.nonzero(linea_capa[:, :, 3] > 0.5)
+    if not len(ys):
+        return 0.0
+    y0, x0, x1 = int(ys.max()) + 4, int(xs.min()), int(xs.max()) + 1
+    ty = np.nonzero(texto_alfa.max(1) > 0.5)[0] if texto_alfa is not None else []
+    ref0 = int(ty.max()) + 12 if len(ty) else y0 + 320       # bajo el nombre: sin sombra
+    y1 = min(ref0 - 10, y0 + 300)
+    Z = fondo[y0:y1, x0:x1]
+    ref = fondo[ref0:ref0 + 30, x0:x1].mean(0)
+    r = Z.mean(2) / np.maximum(ref.mean(1)[None], 1)
+    letras = texto_alfa[y0:y1, x0:x1] > 0.02 if texto_alfa is not None else np.zeros(r.shape, bool)
+    ok = (r < 1.15) & (r > 0.3) & ~letras
+    yy, xx = np.mgrid[0:y1 - y0, 0:x1 - x0].astype(np.float64)
+
+    def modelo(q, X, Y):
+        A, xa, xb, sx, yb, sy = q
+        return 1 - A * 0.5 * (_erf((X - xa) / sx) - _erf((X - xb) / sx)) * 0.5 * (1 - _erf((Y - yb) / sy))
+    # ajuste (Levenberg-Marquardt) en una de cada 4 filas y columnas
+    X, Y, R, K = (v[::4, ::4].ravel() for v in (xx, yy, r, ok))
+    X, Y, R = X[K], Y[K], R[K]
+    w = x1 - x0
+    q = np.array([0.4, 0.3 * w, 0.7 * w, 30.0, 60.0, 30.0])
+    lam = 1e-2
+    err = np.sum((modelo(q, X, Y) - R) ** 2)
+    for _ in range(80):
+        J = np.empty((len(R), 6))
+        for i in range(6):
+            d = np.zeros(6)
+            d[i] = 1e-4 * max(1.0, abs(q[i]))
+            J[:, i] = (modelo(q + d, X, Y) - modelo(q - d, X, Y)) / (2 * d[i])
+        g = J.T @ (modelo(q, X, Y) - R)
+        H = J.T @ J
+        paso = -np.linalg.solve(H + lam * np.diag(np.diag(H) + 1e-9), g)
+        nuevo = q + paso
+        nuevo[3], nuevo[5] = max(nuevo[3], 2), max(nuevo[5], 2)
+        e2 = np.sum((modelo(nuevo, X, Y) - R) ** 2)
+        if e2 < err:
+            q, err, lam = nuevo, e2, lam * 0.3
+        else:
+            lam *= 5
+    A = float(q[0])
+    if A < 0.05 or q[1] >= q[2]:
+        return 0.0
+    Sm = modelo(q, xx, yy).astype(np.float32)
+    peso = np.clip((1 - Sm) / A, 0, 1)
+    c1 = Z / np.maximum(Sm, 0.2)[..., None]
+    # lo que queda, por canal y suave, solo donde había sombra
+    # (en los fondos rojos o verdes algún canal es casi 0: ahí no se corrige más)
+    valido = (ref >= 8)[None]
+    r2 = np.where(valido, c1 / np.maximum(ref[None], 1), 1).astype(np.float32)
+    k = (ok & (peso > 0.02)).astype(np.float32)
+    lejos = ok & (peso < 0.02)
+    base = np.array([np.median(r2[..., c][lejos]) if lejos.any() else 1.0 for c in range(3)], np.float32)
+    base = np.where(np.isfinite(base) & (base > 0.05), base, 1).astype(np.float32)
+    num = cv2.GaussianBlur(r2 * k[..., None], (0, 0), 20)
+    den = cv2.GaussianBlur(k, (0, 0), 20)[..., None]
+    resto = np.where(den > 0.05, num / np.maximum(den, 1e-3), base) / base
+    resto = np.where(valido, np.clip(resto, 0.5, 2), 1)
+    c2 = c1 / (1 + (resto - 1) * peso[..., None])
+    a = texto_alfa[y0:y1, x0:x1, None] if texto_alfa is not None else 0
+    fondo[y0:y1, x0:x1] = np.clip(c2, 0, 255) * (1 - a) + Z * a
+    return A
 
 
 def _club(capas, final, fondo, W, H):
@@ -328,6 +407,14 @@ def _construir(ruta_tif, aprobada=None):
     ea = encima[:, :, 3:4]
     sin = np.where(rehacer[..., None], encima[:, :, :3] * ea + sin * (1 - ea), sin)
 
+    texto = next((c for c in capas if c["nombre"] == "TEXT CLUB" and "imagen" in c), None)
+    texto_alfa = None
+    if texto is not None:
+        l, t, r, b = texto["caja"]
+        texto_alfa = np.zeros((H, W), np.float32)
+        texto_alfa[t:b, l:r] = np.asarray(texto["imagen"])[:, :, 3] / 255
+    quitada = _sombra_bajo_linea(sin, linea_capa, texto_alfa)
+    print("sombra del ejemplo bajo la línea: oscurecía", round(quitada, 2))
     club, vacios = _club(capas, final, sin, W, H)
     return dict(W=W, H=H, fondo=sin, mascara=mascara, linea_capa=linea_capa, lut=lut, linea=linea,
                 lista_encima=lista_encima, club=club, vacios=vacios)

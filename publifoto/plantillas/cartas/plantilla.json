@@ -15,7 +15,7 @@
   "sombra": {
     "crece": 25,
     "difumina": 30,
-    "fuerza": 0.42
+    "fuerza": 0.33
   },
   "capas_encima": [
     "<Path>",
