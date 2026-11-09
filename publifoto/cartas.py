@@ -232,8 +232,15 @@ def componer(p, jugador, ajuste=None, clave=None, marca=None):
         oscuro = None
         if sombra is not None:
             r = int(sombra["crece"])
-            crecido = cv2.dilate(alfa[sl], cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1)))
-            f = 1 - sombra["fuerza"] * cv2.GaussianBlur(crecido, (0, 0), sombra["difumina"])
+            # el jugador sale de detrás de la línea dorada: para la sombra se le alarga hacia
+            # abajo (como si siguiera) y así llega entera hasta la línea, que la corta
+            silueta = alfa[sl].copy()
+            c = col["corte"] - y0
+            if 0 < c <= silueta.shape[0]:
+                fila = silueta[max(0, c - 3):c].max(0)
+                silueta = np.vstack([silueta[:c], np.repeat(fila[None], m, 0)])
+            crecido = cv2.dilate(silueta, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1)))
+            f = 1 - sombra["fuerza"] * cv2.GaussianBlur(crecido, (0, 0), sombra["difumina"])[:alfa[sl].shape[0]]
             # el jugador sigue por debajo de la línea dorada: ahí no cae sombra
             f[max(0, col["corte"] - y0):] = 1
             bajo = bajo * f[..., None]
