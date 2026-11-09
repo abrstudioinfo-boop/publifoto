@@ -93,6 +93,18 @@ python -m publifoto.herramientas.preparar_plantillas "<carpeta con IMANS FUTBOL.
 python -m publifoto.herramientas.preparar_carta "<...>/AMPOSTAPLANTILLA2026.tif" "<...>/S11 B CARTAS.tif"
 ```
 
+Las cartas de otros clubs son el mismo diseño en otro color: se añaden como variantes
+de la plantilla de cartas (fondo, línea dorada y ajuste de color de su TIFF). El nombre y
+el escudo del club se cambian al generar por los que se elijan en la ventana:
+
+```
+python -m publifoto.herramientas.preparar_carta --variante "<...>/TORTOSAPLANTILLA2026.tif" tortosa "Tortosa" "C.F. TORTOSA EBRE" tortosa
+```
+
+El último dato son las palabras que, en el nombre del escudo elegido, eligen ese color solo.
+El nombre del club se escribe con DIN Pro Condensed Bold si está en el ordenador y, si no,
+con Bebas Neue (libre, va con el programa).
+
 `herramientas/tiff_capas.py` lee las capas de los TIFF de Photoshop sin Adobe.
 
 ## Programa montado (Mac y Windows)

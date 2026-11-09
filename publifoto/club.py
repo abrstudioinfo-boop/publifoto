@@ -107,6 +107,11 @@ def ajustado(ruta, tam, fondo=(0, 0, 0, 0)):
     return lienzo
 
 
+def texto_guardado(nombre):
+    """El nombre del club guardado para ese escudo, o None."""
+    return _nombres().get(nombre)
+
+
 def texto_club(nombre):
     """Nombre del club que se imprime en los imanes: el guardado para ese logo o, si
     no hay, el nombre del archivo en mayúsculas."""

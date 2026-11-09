@@ -19,6 +19,7 @@ PLANTILLAS = os.path.join(os.path.dirname(__file__), "plantillas")
 # las letras van dentro del programa (libres, OFL) para que salga igual en Windows y Mac
 FUENTES = os.path.join(os.path.dirname(__file__), "recursos", "fuentes")
 _FUENTES_SISTEMA = [os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"),
+                    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "Windows", "Fonts"),
                     "/Library/Fonts", "/System/Library/Fonts", os.path.expanduser("~/Library/Fonts")]
 
 

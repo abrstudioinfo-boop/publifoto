@@ -29,6 +29,9 @@ SOMBRA_MAX = 120   # px
 # oscureciendo el fondo hasta «fuerza». Comparada con la carta aprobada de Amposta (S11 B),
 # un poco más suave a petición del usuario.
 SOMBRA = {"crece": 25, "difumina": 30, "fuerza": 0.42}
+# letra del nombre del club cuando se cambia: la del diseño (DIN Pro Condensed Bold) si está
+# en el ordenador; si no, Bebas Neue (libre, va con el programa)
+FUENTES_CLUB = ["DINPro-CondensedBold.otf", "DINPro-CondBold.otf", "BebasNeue-Regular.ttf"]
 
 
 def visibilidad(capas):
@@ -100,10 +103,12 @@ def aplicar_lut(rgb, lut):
 
 
 def _linea(final, debajo, encima, corte, margen=40):
-    """Añade a «encima» la línea dorada que corta al jugador (cerca de la fila del corte)."""
+    """Añade a «encima» la línea dorada que corta al jugador (cerca de la fila del corte).
+    Devuelve la primera fila de la línea."""
     y0 = max(0, corte - margen)
     z = final[y0:corte + margen]
-    oro = (z[..., 0] > 120) & (z[..., 0] - z[..., 2] > 50)
+    # dorado: rojo y verde altos y poco azul (en las cartas de fondo rojo el verde es bajo)
+    oro = (z[..., 0] > 120) & (z[..., 1] > 80) & (z[..., 0] - z[..., 2] > 50)
     filas = np.nonzero(oro.mean(1) > 0.3)[0]
     if not len(filas):
         return None
@@ -128,10 +133,72 @@ def _linea(final, debajo, encima, corte, margen=40):
             al = np.full(x1 - x0, np.clip(np.median(num[ok] / den[ok]), 0, 1), np.float32)
         col = final[y, x0:x1] if a <= y <= b else nucleo
         e = encima[y, x0:x1]
-        e[:, :3] = col * al[:, None] + e[:, :3] * (1 - al[:, None])
-        e[:, 3] = al + e[:, 3] * (1 - al)
+        sale = al + e[:, 3] * (1 - al)
+        e[:, :3] = (col * al[:, None] + e[:, :3] * (e[:, 3] * (1 - al))[:, None]) / np.maximum(sale, 1e-6)[:, None]
+        e[:, 3] = sale
     print("línea dorada: filas", a, "a", b, "columnas", x0, "a", x1)
     return a
+
+
+def _rellenar(img, mask, caja):
+    """El fondo que hay debajo de una forma (mask) dentro de caja: rayas verticales (un valor
+    por columna) más un degradado vertical (uno por fila), aprendidos en lo que se ve
+    alrededor, y lo que no explican (rayas en diagonal) traído suave desde los bordes.
+    Devuelve el recorte de caja ya rellenado."""
+    x0, y0, x1, y1 = caja
+    z = img[y0:y1, x0:x1].astype(np.float32)
+    m = mask[y0:y1, x0:x1]
+    k = ~m
+    zz = np.where(k[..., None], z, np.nan)
+    R = np.zeros((y1 - y0, 3), np.float32)
+    for _ in range(4):
+        C = np.nanmedian(zz - R[:, None], axis=0)
+        R = np.nanmedian(zz - C[None], axis=1)
+    pred = R[:, None] + C[None]
+    resto = np.where(k[..., None], z - pred, 0).astype(np.float32)
+    num = cv2.GaussianBlur(resto, (0, 0), 10)
+    den = cv2.GaussianBlur(k.astype(np.float32), (0, 0), 10)[..., None]
+    pred = np.clip(pred + num / np.maximum(den, 1e-2), 0, 255)
+    suave = np.maximum(cv2.GaussianBlur(m.astype(np.float32), (0, 0), 1.5), m)[..., None]
+    return np.clip(pred * suave + z * (1 - suave), 0, 255)
+
+
+def _club(capas, final, fondo, W, H):
+    """Nombre del club y escudo de la plantilla: dónde están, el degradado del texto y el
+    fondo que queda al quitarlos (para poner los de otro club)."""
+    def capa(nombre):
+        c = next((c for c in capas if c["nombre"] == nombre and "imagen" in c), None)
+        if c is None:
+            return None, None
+        l, t, r, b = c["caja"]
+        a = np.zeros((H, W), np.float32)
+        al = np.asarray(c["imagen"])[:, :, 3] / 255
+        x0, y0, x1, y1 = max(0, l), max(0, t), min(W, r), min(H, b)
+        a[y0:y1, x0:x1] = al[y0 - t:y1 - t, x0 - l:x1 - l]
+        return a, (x0, y0, x1, y1)
+    datos, vacios = {}, {}
+    for clave, nombre, crece, margen in (("nombre", "TEXT CLUB", 2, 40), ("escudo", "logo", 8, 60)):
+        a, caja = capa(nombre)
+        if a is None:
+            continue
+        ys, xs = np.nonzero(a > 0.5)
+        tinta = [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1]
+        forma = cv2.dilate((a > 0.012).astype(np.uint8),
+                           cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * crece + 1, 2 * crece + 1))) > 0
+        l, t, r, b = caja
+        zona = (max(0, l - margen), max(0, t - margen), min(W, r + margen), min(H, b + margen))
+        vacios[clave] = (zona, _rellenar(fondo, forma, zona))
+        datos[clave] = {"caja": tinta}
+        if clave == "nombre":
+            # color de cada fila de las letras (el degradado dorado es un efecto de la capa)
+            lleno = a > 0.95
+            filas = [[int(round(v)) for v in np.median(final[y][lleno[y]], 0)] if lleno[y].any() else None
+                     for y in range(tinta[1], tinta[3])]
+            for i in range(len(filas)):          # filas sin letras llenas: la más cercana
+                if filas[i] is None:
+                    filas[i] = next(f for f in filas[i:] + filas[::-1] if f is not None)
+            datos[clave]["degradado"] = filas
+    return datos, vacios
 
 
 def _color_aprobado(final, ruta_aprobada, mascara, ej_a):
@@ -162,12 +229,11 @@ def _afin(rgb, M):
     return np.clip(rgb / 255 @ M[:3] + M[3], 0, 255).astype(np.float32)
 
 
-def main(ruta_tif, carpeta=None, id_="cartas", aprobada=None):
-    """ruta_tif: el TIFF de la carta con capas y un jugador de ejemplo; carpeta: dónde
-    se guarda la plantilla (por defecto, dentro del programa). Sirve para cualquier
-    carta hecha con el mismo diseño (otros colores, otro club, otro año).
-    aprobada: una carta final ya aprobada de este diseño (CMYK); si se da, la plantilla
-    toma su color."""
+def _construir(ruta_tif, aprobada=None):
+    """Lo que la carta necesita sacado del TIFF con capas: el fondo sin el jugador de
+    ejemplo, la máscara, la línea dorada, el ajuste de color del jugador, y el nombre y el
+    escudo del club. aprobada: una carta final ya aprobada de este diseño (CMYK); si se
+    da, la plantilla toma su color."""
     (W, H), modo, capas = leer_capas(ruta_tif)
     vis = visibilidad(capas)
     k = next((i for i, c in enumerate(capas) if c["nombre"] == HUECO), None)
@@ -229,8 +295,12 @@ def main(ruta_tif, carpeta=None, id_="cartas", aprobada=None):
         encima[:, :, :3] = _afin(encima[:, :, :3], afin)
 
     # la línea dorada bajo el jugador es una forma sin píxeles que Photoshop pinta por encima
-    # del jugador: se saca de la imagen final y va con lo de encima
-    linea = _linea(final, debajo, encima, _colocacion(W, H)["corte"])
+    # del jugador: se saca de la imagen final, sola (lo único que va encima del jugador)
+    linea_capa = np.zeros((H, W, 4), np.float32)
+    linea = _linea(final, debajo, linea_capa, _colocacion(W, H)["corte"])
+    la = linea_capa[:, :, 3:4]
+    encima[:, :, :3] = linea_capa[:, :, :3] * la + encima[:, :, :3] * (1 - la)
+    encima[:, :, 3:4] = la + encima[:, :, 3:4] * (1 - la)
 
     # aprender el ajuste donde el resultado no lleva nada encima
     zona = (mascara > 250) & (cubierto > 0.99) & (encima[:, :, 3] < 0.01)
@@ -258,20 +328,55 @@ def main(ruta_tif, carpeta=None, id_="cartas", aprobada=None):
     ea = encima[:, :, 3:4]
     sin = np.where(rehacer[..., None], encima[:, :, :3] * ea + sin * (1 - ea), sin)
 
-    carpeta = carpeta or os.path.join(DESTINO, id_)
+    club, vacios = _club(capas, final, sin, W, H)
+    return dict(W=W, H=H, fondo=sin, mascara=mascara, linea_capa=linea_capa, lut=lut, linea=linea,
+                lista_encima=lista_encima, club=club, vacios=vacios)
+
+
+def _guardar_imagenes(d, carpeta, mascara=True):
     os.makedirs(carpeta, exist_ok=True)
-    Image.fromarray(np.clip(sin, 0, 255).astype(np.uint8)).save(os.path.join(carpeta, "fondo.png"))
-    Image.fromarray(np.clip(base, 0, 255).astype(np.uint8)).save(os.path.join(carpeta, "debajo.png"))
-    Image.fromarray(mascara).save(os.path.join(carpeta, "mascara.png"))
-    Image.fromarray(np.dstack([np.clip(encima[:, :, :3], 0, 255), encima[:, :, 3:] * 255]).astype(np.uint8),
+    Image.fromarray(np.clip(d["fondo"] + .5, 0, 255).astype(np.uint8)).save(os.path.join(carpeta, "fondo.png"))
+    if mascara:
+        Image.fromarray(d["mascara"]).save(os.path.join(carpeta, "mascara.png"))
+    lc = d["linea_capa"]
+    Image.fromarray(np.dstack([np.clip(lc[:, :, :3] + .5, 0, 255), lc[:, :, 3:] * 255 + .5]).astype(np.uint8),
                     "RGBA").save(os.path.join(carpeta, "encima.png"))
-    np.save(os.path.join(carpeta, "lut.npy"), lut)
+    np.save(os.path.join(carpeta, "lut.npy"), d["lut"])
+    club = {k: dict(v) for k, v in d["club"].items()}
+    for clave, (zona, im) in d["vacios"].items():
+        archivo = f"sin_{clave}.png"
+        Image.fromarray(np.clip(im + .5, 0, 255).astype(np.uint8)).save(os.path.join(carpeta, archivo))
+        club[clave]["vacio"] = {"archivo": archivo, "x": int(zona[0]), "y": int(zona[1])}
+    return club
+
+
+def main(ruta_tif, carpeta=None, id_="cartas", aprobada=None, club_nombre="C.F. AMPOSTA", buscar=("amposta",)):
+    """ruta_tif: el TIFF de la carta con capas y un jugador de ejemplo; carpeta: dónde
+    se guarda la plantilla (por defecto, dentro del programa). Sirve para cualquier
+    carta hecha con el mismo diseño (otros colores, otro club, otro año). Los colores de
+    otros clubs se añaden después con variante() y se conservan al rehacer esta."""
+    d = _construir(ruta_tif, aprobada)
+    W, H, linea = d["W"], d["H"], d["linea"]
+    carpeta = carpeta or os.path.join(DESTINO, id_)
+    club = _guardar_imagenes(d, carpeta)
+    anteriores = {}
+    try:
+        with open(os.path.join(carpeta, "plantilla.json"), encoding="utf-8") as f:
+            anteriores = json.load(f).get("variantes", {})
+    except (OSError, ValueError):
+        pass
     _guardar(carpeta, {
         "id": id_, "nombre": "CARTAS", "tipo": "carta", "color": "CMYK", "lienzo": [W, H], "ppp": 300,
-        "fondo": "fondo.png", "debajo": "debajo.png", "mascara": "mascara.png", "encima": "encima.png",
-        "lut": "lut.npy", "sombra": SOMBRA, "capas_encima": lista_encima,
+        "fondo": "fondo.png", "mascara": "mascara.png", "encima": "encima.png",
+        "lut": "lut.npy", "sombra": SOMBRA, "capas_encima": d["lista_encima"],
         # desde esta fila (la línea dorada) lo de la plantilla va encima del jugador
         "linea": int(linea - 3) if linea is not None else _colocacion(W, H)["corte"] - 3,
+        # nombre y escudo del club de la plantilla (para poner los de otro) y el color de
+        # carta que se elige solo si el escudo elegido lleva alguna de las palabras de buscar
+        "club": dict(club, texto=club_nombre, fuentes=FUENTES_CLUB),
+        "buscar": list(buscar),
+        # otros colores del mismo diseño (variantes/<clave>): fondo, línea, ajuste y club
+        "variantes": anteriores,
         "huecos": [{"rect": [0, 0, W, H]}], "jugadores_por_hoja": 1,
         # medido en las cartas aprobadas: pelo al 14,75 % del alto de la carta
         "encuadre": {"margen": 0.1475, "alto_rel": 5.69, "centro": 0.0, "referencia": "mixto"},
@@ -280,6 +385,27 @@ def main(ruta_tif, carpeta=None, id_="cartas", aprobada=None):
         # sitio del jugador (la sesión CARTAS, plantilla de 3780 x 5315), a la escala de esta
         "colocacion": _colocacion(W, H),
     })
+
+
+def variante(ruta_tif, clave, nombre, club_nombre, buscar, carpeta=None):
+    """Añade a la plantilla de cartas otro color del mismo diseño (el TIFF de otro club):
+    su fondo, su línea, su ajuste de color y el sitio de su nombre y su escudo. El jugador
+    se coloca igual que en la plantilla. buscar: palabras que, en el nombre del escudo
+    elegido, eligen este color solo."""
+    carpeta = carpeta or os.path.join(DESTINO, "cartas")
+    with open(os.path.join(carpeta, "plantilla.json"), encoding="utf-8") as f:
+        p = json.load(f)
+    d = _construir(ruta_tif)
+    if [d["W"], d["H"]] != p["lienzo"]:
+        raise ValueError("La carta no tiene el tamaño de la plantilla de cartas.")
+    if d["linea"] is None or abs(d["linea"] - 3 - p["linea"]) > 4:
+        raise ValueError(f"La línea dorada no está donde en la plantilla (fila {d['linea']}).")
+    sub = "variantes/" + clave
+    club = _guardar_imagenes(d, os.path.join(carpeta, "variantes", clave), mascara=False)
+    p.setdefault("variantes", {})[clave] = {
+        "nombre": nombre, "carpeta": sub, "buscar": list(buscar),
+        "club": dict(club, texto=club_nombre, fuentes=FUENTES_CLUB)}
+    _guardar(carpeta, p)
 
 
 def _colocacion(W, H):
@@ -294,4 +420,8 @@ def _colocacion(W, H):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], aprobada=sys.argv[2] if len(sys.argv) > 2 else None)
+    if len(sys.argv) > 2 and sys.argv[1] == "--variante":
+        # --variante TIF clave "Nombre del color" "NOMBRE DEL CLUB" palabra1,palabra2
+        variante(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6].split(","))
+    else:
+        main(sys.argv[1], aprobada=sys.argv[2] if len(sys.argv) > 2 else None)

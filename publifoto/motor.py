@@ -58,7 +58,8 @@ class Trabajo:
     ajustes: dict = field(default_factory=dict)   # {producto: {foto: {dx, dy, zoom}}}
     avisos: list = field(default_factory=list)    # de los revisores automáticos
     escudo: str = None        # logo del club (club.py); None = el de la plantilla
-    club: str = None          # nombre del club en los imanes; None = el de la plantilla
+    club: str = None          # nombre del club en las cartas y los imanes; None = el de la plantilla
+    carta: str = None         # color de las cartas (cartas.colores); None = el de la plantilla
     temporada: str = None     # «26/27»; None = la temporada actual
     retocar_piel: bool = True # quitar granos y rojeces notables (retoque.py)
     subcarpeta: bool = True   # False: los productos van directamente en carpeta_salida
@@ -164,6 +165,10 @@ def revisar_encuadres(trabajo):
 def comprobar(trabajo):
     """Avisos antes de generar (lista de textos)."""
     avisos = []
+    if "cartas" in trabajo.productos and trabajo.carta and not trabajo.marca["escudo"]:
+        from . import cartas
+        nombre = dict(cartas.colores(productos.cargar_plantilla("cartas"))).get(trabajo.carta, trabajo.carta)
+        avisos.append(f"Las cartas de {nombre} saldrán sin escudo: elige el escudo del club.")
     return avisos
 
 
@@ -268,7 +273,8 @@ def _generar_producto(trabajo, id_, progreso, hilos):
     imp, edi = os.path.join(base, "IMPRESION"), os.path.join(base, "EDITABLE")
     if id_ == "cartas":
         from . import cartas
-        salidas += cartas.generar(p, jug, trabajo.equipo, aj, imp, edi, progreso, hilos)
+        salidas += cartas.generar(p, jug, trabajo.equipo, aj, imp, edi, progreso, hilos,
+                                  clave=trabajo.carta, marca=trabajo.marca)
     elif p["tipo"] == "pdf":
         hs = productos.hojas(p, jug)
         nombre = productos.nombre_archivo(p, trabajo.equipo)
@@ -343,6 +349,7 @@ def guardar_proyecto(trabajo):
     os.makedirs(trabajo.carpeta_equipo, exist_ok=True)
     datos = {
         "version": 2, "equipo": trabajo.equipo, "escudo": trabajo.escudo, "club": trabajo.club,
+        "carta": trabajo.carta,
         "temporada": trabajo.temporada, "carpeta_fotos": trabajo.carpeta_fotos,
         "carpeta_recortes": trabajo.carpeta_recortes, "carpeta_salida": trabajo.carpeta_salida,
         "subcarpeta": trabajo.subcarpeta, "retocar_piel": trabajo.retocar_piel,
@@ -361,7 +368,7 @@ def abrir_proyecto(ruta, progreso=print):
         d = json.load(f)
     t = Trabajo(equipo=d["equipo"], carpeta_fotos=d["carpeta_fotos"], carpeta_salida=d["carpeta_salida"],
                 carpeta_recortes=d.get("carpeta_recortes"), productos=d["productos"], ajustes=d.get("ajustes", {}),
-                escudo=d.get("escudo"), club=d.get("club"), temporada=d.get("temporada"),
+                escudo=d.get("escudo"), club=d.get("club"), carta=d.get("carta"), temporada=d.get("temporada"),
                 subcarpeta=d.get("subcarpeta", True), retocar_piel=d.get("retocar_piel", True))
     t.jugadores = []
     for x in d["jugadores"]:

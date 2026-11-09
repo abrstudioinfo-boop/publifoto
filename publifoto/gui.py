@@ -4,6 +4,7 @@ import sys
 import traceback
 from dataclasses import replace
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageOps
 from PySide6.QtCore import QObject, QSettings, Qt, QThread, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QImage, QPixmap
@@ -13,7 +14,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFil
                                QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSlider,
                                QVBoxLayout, QWidget)
 
-from . import actualizar, club, encuadre, motor, productos, revision, tema
+from . import actualizar, cartas, club, encuadre, motor, productos, revision, tema
 from .tema import rol
 from .analisis import abrir, girar
 
@@ -354,9 +355,23 @@ class Revision(QDialog):
                      centro=(col["centro"] - x0) * red, pelo=(col["pelo"] - y0) * red)
         med_v = dict(med, s=med["s"] * red / f, mid=med["mid"] * f, top=med["top"] * f)
         vista = carta_auto.colocar(im, med_v, col_v, self.t.ajustes.get(p["id"], {}).get(j.id))
-        fondo = Image.new("RGBA", vista.size, (243, 237, 241, 255))
+        fondo = self._fondo_carta(p, col, red, vista.size)
         fondo.alpha_composite(vista)
         self.vista.setPixmap(a_pixmap(fondo))
+
+    def _fondo_carta(self, p, col, red, tam):
+        """La carta sin jugador (color, nombre y escudo del club), en el trozo de la foto."""
+        clave = (self.t.carta, self.t.marca.get("escudo"), self.t.club, tam)
+        if getattr(self, "_fondo_carta_clave", None) != clave:
+            try:
+                fondo, _ = cartas.fondo_club(p, self.t.carta, self.t.marca)
+                x0, y0, x1, y1 = col["caja"]
+                im = Image.fromarray(np.clip(fondo[y0:y1, x0:x1] + .5, 0, 255).astype(np.uint8))
+                im = im.resize(tam, Image.LANCZOS).convert("RGBA")
+            except Exception:
+                im = Image.new("RGBA", tam, (243, 237, 241, 255))
+            self._fondo_carta_clave, self._fondo_carta_im = clave, im
+        return self._fondo_carta_im.copy()
 
     def keyPressEvent(self, e):
         teclas = {Qt.Key_Up: (0, 0.01, 1), Qt.Key_Down: (0, -0.01, 1), Qt.Key_Left: (0.01, 0, 1),
@@ -581,7 +596,8 @@ class Ventana(QMainWindow):
         v1.addWidget(self.info)
         fila.addWidget(t1, 3)
 
-        # escudo y nombre del club: cambian en 15 x 20, calendarios e imanes
+        # escudo y nombre del club: cambian en 15 x 20, calendarios, imanes y cartas; el
+        # color de las cartas se elige solo con el escudo (y se puede cambiar)
         t2, v2 = tema.tarjeta("Club", 2)
         f_escudo = QHBoxLayout()
         self.vista_escudo = QLabel()
@@ -603,21 +619,30 @@ class Ventana(QMainWindow):
         v2.addLayout(f_escudo)
         self.txt_club = QLineEdit()
         self.txt_club.setPlaceholderText("C.F. AMPOSTA")
-        self.txt_club.setToolTip("Nombre del club en la franja de los imanes")
+        self.txt_club.setToolTip("Nombre del club en las cartas y en la franja de los imanes")
         self.txt_temporada = QLineEdit(club.temporada_actual())
         self.txt_temporada.setFixedWidth(76)
+        self.combo_carta = SinRueda()
+        self.combo_carta.setToolTip("Color de las cartas: se elige solo con el escudo del club")
+        self.plantilla_cartas = productos.cargar_plantilla("cartas")
+        for clave, nombre in cartas.colores(self.plantilla_cartas):
+            self.combo_carta.addItem(nombre, clave or "")
         f_texto = QGridLayout()
         f_texto.setHorizontalSpacing(10)
         f_texto.setVerticalSpacing(4)
-        f_texto.addWidget(rol(QLabel("Nombre en imanes"), "suave"), 0, 0)
+        f_texto.addWidget(rol(QLabel("Nombre del club (cartas e imanes)"), "suave"), 0, 0)
         f_texto.addWidget(rol(QLabel("Temporada"), "suave"), 0, 1)
         f_texto.addWidget(self.txt_club, 1, 0)
         f_texto.addWidget(self.txt_temporada, 1, 1)
+        f_texto.addWidget(rol(QLabel("Color de las cartas"), "suave"), 2, 0)
+        f_texto.addWidget(self.combo_carta, 3, 0, 1, 2)
         v2.addLayout(f_texto)
         fila.addWidget(t2, 2)
         lay.addLayout(fila)
         self.pintar_logos(self.ajustes_app.value("escudo", ""))
+        self._poner_carta(self._carta_de_escudo())
         self.combo_escudo.currentIndexChanged.connect(self.escudo_cambiado)
+        self.combo_carta.currentIndexChanged.connect(self.carta_cambiada)
 
         # 03 productos
         t3, v3 = tema.tarjeta("¿Qué quieres hacer?", 3)
@@ -717,8 +742,45 @@ class Ventana(QMainWindow):
     def escudo_cambiado(self):
         ruta = self.combo_escudo.currentData()
         self.ajustes_app.setValue("escudo", ruta or "")
-        self.txt_club.setText(club.texto_club(self.combo_escudo.currentText()) if ruta else "")
+        self._poner_carta(self._carta_de_escudo())
+        nombre = self.combo_escudo.currentText()
+        if not ruta:
+            texto = ""
+        elif club.texto_guardado(nombre):
+            texto = club.texto_guardado(nombre)
+        elif self.combo_carta.currentData() or cartas.es_club_de_plantilla(self.plantilla_cartas, nombre):
+            texto = cartas.nombre_club(self.plantilla_cartas, self.combo_carta.currentData() or None)
+        else:
+            texto = club.texto_club(nombre)
+        self.txt_club.setText(texto)
         self._pintar_escudo()
+
+    def _carta_de_escudo(self):
+        """Color de carta para el escudo elegido: el que se eligió la última vez para ese
+        escudo o, si no, el del club que nombra (Tortosa, Batea...)."""
+        if not self.combo_escudo.currentData():
+            return ""
+        nombre = self.combo_escudo.currentText()
+        guardado = self.ajustes_app.value("carta/" + nombre, None)
+        if guardado is not None:
+            return guardado
+        return cartas.color_para(self.plantilla_cartas, nombre) or ""
+
+    def _poner_carta(self, clave):
+        self.combo_carta.blockSignals(True)
+        self.combo_carta.setCurrentIndex(max(0, self.combo_carta.findData(clave or "")))
+        self.combo_carta.blockSignals(False)
+        self.txt_club.setPlaceholderText(cartas.nombre_club(self.plantilla_cartas, clave or None) or "C.F. AMPOSTA")
+
+    def carta_cambiada(self):
+        clave = self.combo_carta.currentData() or None
+        if self.combo_escudo.currentData():
+            self.ajustes_app.setValue("carta/" + self.combo_escudo.currentText(), clave or "")
+        # el nombre del club de antes era el de otro color: pasa al de este
+        de_colores = {cartas.nombre_club(self.plantilla_cartas, c) for c, _ in cartas.colores(self.plantilla_cartas)}
+        if self.txt_club.text().strip() in de_colores and clave:
+            self.txt_club.setText(cartas.nombre_club(self.plantilla_cartas, clave))
+        self._poner_carta(clave)
 
     def anadir_logos(self):
         carpeta = QFileDialog.getExistingDirectory(self, "Carpeta con los escudos de los clubs")
@@ -733,6 +795,7 @@ class Ventana(QMainWindow):
         """Lo elegido en la ventana pasa al trabajo; el nombre del club se recuerda para ese escudo."""
         t.escudo = self.combo_escudo.currentData()
         t.club = self.txt_club.text().strip() or None
+        t.carta = self.combo_carta.currentData() or None
         t.temporada = self.txt_temporada.text().strip() or None
         if t.escudo and t.club:
             club.guardar_texto_club(self.combo_escudo.currentText(), t.club)
@@ -744,6 +807,7 @@ class Ventana(QMainWindow):
         self.combo_escudo.setCurrentIndex(max(0, self.combo_escudo.findData(t.escudo)) if t.escudo else 0)
         self.combo_escudo.blockSignals(False)
         self._pintar_escudo()
+        self._poner_carta(t.carta)
         self.txt_club.setText(t.club or "")
         self.txt_temporada.setText(t.temporada or club.temporada_actual())
 
@@ -981,6 +1045,7 @@ class Ventana(QMainWindow):
                     prod = p["id"]
                     break
         if prod:
+            self.marca_a_trabajo(self.trabajo)
             Revision(self.trabajo, self, prod, a.foto).exec()
             self.tras_revision(a)
         else:
@@ -1065,6 +1130,7 @@ class Ventana(QMainWindow):
         self.trabajo.productos = self.productos_elegidos()
         if not self.trabajo.productos:
             return
+        self.marca_a_trabajo(self.trabajo)
         Revision(self.trabajo, self).exec()
         self.tras_revision()
 
