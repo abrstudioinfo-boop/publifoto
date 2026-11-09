@@ -24,7 +24,6 @@ def _plantilla_px(p):
         _cache.clear()
         _cache[clave] = dict(
             fondo=np.asarray(Image.open(os.path.join(c, p["fondo"])).convert("RGB"), np.float32),
-            debajo=np.asarray(Image.open(os.path.join(c, p["debajo"])).convert("RGB"), np.float32),
             mascara=np.asarray(Image.open(os.path.join(c, p["mascara"])), np.float32) / 255,
             encima=np.asarray(Image.open(os.path.join(c, p["encima"])), np.float32),
             lut=np.load(os.path.join(c, p["lut"])),
@@ -58,12 +57,15 @@ def componer(p, jugador, ajuste=None):
         sl = (slice(y0, y1), slice(x0, x1))
         jug = aplicar_lut(k[sl][:, :, :3], t["lut"])
         a = alfa[sl][..., None]
-        # lo que hay detrás del jugador: la propia carta sin el logo ni los textos (así no se
-        # nota ningún borde donde se rehace); bajo el logo opaco, las capas de debajo
+        # detrás del jugador, la carta entera (adornos, textos y escudo van debajo de él:
+        # el jugador no lo tapa nada salvo la línea dorada que lo corta)
+        bajo = t["fondo"][sl]
         e = t["encima"][sl]
         ea = e[:, :, 3:4] / 255
-        limpio = (t["fondo"][sl] - e[:, :, :3] * ea) / np.maximum(1 - ea, 1e-3)
-        bajo = np.where(ea > 0.98, t["debajo"][sl], np.clip(limpio, 0, 255))
+        # la línea dorada y lo que hay por debajo de ella sí van encima del jugador
+        linea = max(0, p.get("linea", col["corte"] - 3) - y0)
+        ea = ea.copy()
+        ea[:linea] = 0
         oscuro = None
         if sombra is not None:
             r = int(sombra["crece"])
@@ -74,12 +76,10 @@ def componer(p, jugador, ajuste=None):
             bajo = bajo * f[..., None]
             oscuro = (1 - f) * t["mascara"][sl]       # para la capa «Sombra» del PSD
         comp = jug * a + bajo * (1 - a)
-        # lo que va encima (logo, textos) se vuelve a poner encima de todo
         comp = e[:, :, :3] * ea + comp * (1 - ea)
         # solo dentro del hueco de la foto; fuera, la carta tal cual
         mk = t["mascara"][sl][..., None]
         carta[sl] = comp * mk + carta[sl] * (1 - mk)
-        cerca = alfa[sl] > 0.002
         if oscuro is not None and oscuro.max() > 0:
             # negro con esta opacidad = oscurecer el fondo como la sombra de Photoshop
             capas.append(("Sombra", Image.fromarray(np.dstack([np.zeros(oscuro.shape + (3,), np.uint8),
@@ -87,10 +87,10 @@ def componer(p, jugador, ajuste=None):
                                                     "RGBA"), None, int(x0), int(y0)))
         jug_rgba = np.dstack([jug, alfa[sl] * 255]).astype(np.uint8)
         capas.append((jugador.nombre, Image.fromarray(np.clip(jug_rgba, 0, 255), "RGBA"), None, int(x0), int(y0)))
-        enc = np.dstack([e[:, :, :3], ea[:, :, 0] * cerca * 255]).astype(np.uint8)
+        enc = np.dstack([e[:, :, :3], ea[:, :, 0] * 255]).astype(np.uint8)
         if enc[:, :, 3].any():
-            capas.append(("Logo y textos", Image.fromarray(enc, "RGBA"), None, int(x0), int(y0)))
-    return Image.fromarray(np.clip(carta, 0, 255).astype(np.uint8)), capas
+            capas.append(("Línea dorada", Image.fromarray(enc, "RGBA"), None, int(x0), int(y0)))
+    return Image.fromarray(np.clip(carta + .5, 0, 255).astype(np.uint8)), capas
 
 
 def generar(p, jugadores, equipo, ajustes, imp, edi, progreso=print, hilos=None):

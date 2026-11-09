@@ -270,6 +270,8 @@ def main(ruta_tif, carpeta=None, id_="cartas", aprobada=None):
         "id": id_, "nombre": "CARTAS", "tipo": "carta", "color": "CMYK", "lienzo": [W, H], "ppp": 300,
         "fondo": "fondo.png", "debajo": "debajo.png", "mascara": "mascara.png", "encima": "encima.png",
         "lut": "lut.npy", "sombra": SOMBRA, "capas_encima": lista_encima,
+        # desde esta fila (la línea dorada) lo de la plantilla va encima del jugador
+        "linea": int(linea - 3) if linea is not None else _colocacion(W, H)["corte"] - 3,
         "huecos": [{"rect": [0, 0, W, H]}], "jugadores_por_hoja": 1,
         # medido en las cartas aprobadas: pelo al 14,75 % del alto de la carta
         "encuadre": {"margen": 0.1475, "alto_rel": 5.69, "centro": 0.0, "referencia": "mixto"},
