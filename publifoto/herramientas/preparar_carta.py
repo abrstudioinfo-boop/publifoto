@@ -106,7 +106,7 @@ def _linea(final, debajo, encima, corte, margen=40):
     oro = (z[..., 0] > 120) & (z[..., 0] - z[..., 2] > 50)
     filas = np.nonzero(oro.mean(1) > 0.3)[0]
     if not len(filas):
-        return
+        return None
     a, b = y0 + filas.min(), y0 + filas.max()
     centro = (a + b) // 2
     # el tramo seguido más largo (a los lados la fila toca el marco dorado)
@@ -131,6 +131,7 @@ def _linea(final, debajo, encima, corte, margen=40):
         e[:, :3] = col * al[:, None] + e[:, :3] * (1 - al[:, None])
         e[:, 3] = al + e[:, 3] * (1 - al)
     print("línea dorada: filas", a, "a", b, "columnas", x0, "a", x1)
+    return a
 
 
 def _color_aprobado(final, ruta_aprobada, mascara, ej_a):
@@ -229,7 +230,7 @@ def main(ruta_tif, carpeta=None, id_="cartas", aprobada=None):
 
     # la línea dorada bajo el jugador es una forma sin píxeles que Photoshop pinta por encima
     # del jugador: se saca de la imagen final y va con lo de encima
-    _linea(final, debajo, encima, _colocacion(W, H)["corte"])
+    linea = _linea(final, debajo, encima, _colocacion(W, H)["corte"])
 
     # aprender el ajuste donde el resultado no lleva nada encima
     zona = (mascara > 250) & (cubierto > 0.99) & (encima[:, :, 3] < 0.01)
@@ -249,6 +250,10 @@ def main(ruta_tif, carpeta=None, id_="cartas", aprobada=None):
     # carta sin jugador: el resultado final con la zona del ejemplo rehecha
     sin = final.copy()
     rehacer = (dist <= SOMBRA_MAX) & (mascara > 0)
+    if linea is not None:
+        # de la línea dorada para abajo el jugador no se ve (el recuadro del nombre, otra
+        # forma sin píxeles, lo tapa): ahí la carta queda tal cual
+        rehacer[linea:] = False
     sin[rehacer] = base[rehacer]
     ea = encima[:, :, 3:4]
     sin = np.where(rehacer[..., None], encima[:, :, :3] * ea + sin * (1 - ea), sin)
