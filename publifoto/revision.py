@@ -422,6 +422,38 @@ def _presencia_en_archivos(trabajo, pl, hojas, sitios, salidas):
     return avisos
 
 
+def _revisar_hojas(pl, jug, hechos, id_):
+    """El TIFF con todos (una página CMYK de hoja de imprenta por persona) y el PDF de copias."""
+    import tifffile
+    avisos = []
+    tif = [s for s in hechos if s.lower().endswith(".tif")]
+    pdf = [s for s in hechos if s.lower().endswith(".pdf")]
+    hoja = [round(mm / 25.4 * pl.get("ppp", 300)) for mm in pl["hoja_mm"]]
+    if not tif:
+        return [Aviso("", "salida", "error", "Falta el TIFF con todos los calendarios.", id_)]
+    with tifffile.TiffFile(tif[0]) as t:
+        if len(t.pages) != len(jug):
+            avisos.append(Aviso(os.path.basename(tif[0]), "salida", "error",
+                                f"Tiene {len(t.pages)} páginas y son {len(jug)} personas.", id_))
+        for pg in t.pages:
+            if list(pg.shape[1::-1]) != hoja or pg.photometric.name != "SEPARATED":
+                avisos.append(Aviso(os.path.basename(tif[0]), "salida", "error",
+                                    f"Página de {pg.shape[1]} x {pg.shape[0]} px o sin CMYK.", id_))
+                break
+    copias = pl.get("pdf_copias")
+    if copias:
+        import pymupdf as fitz
+        esperadas = sum(copias.get(j.tipo, copias.get("jugador", 1)) for j in jug)
+        if not pdf:
+            avisos.append(Aviso("", "salida", "error", "Falta el PDF con las copias.", id_))
+        else:
+            with fitz.open(pdf[0]) as d:
+                if len(d) != esperadas:
+                    avisos.append(Aviso(os.path.basename(pdf[0]), "salida", "error",
+                                        f"Tiene {len(d)} páginas y tendrían que ser {esperadas}.", id_))
+    return avisos
+
+
 def revisar_salida(trabajo, salidas):
     """Comprueba los archivos generados. Devuelve avisos de nivel 'error'."""
     from PIL import Image
@@ -440,6 +472,9 @@ def revisar_salida(trabajo, salidas):
         hechos = [s for s in salidas if os.path.dirname(s) == imp]
         if not hechos:
             avisos.append(Aviso("", "salida", "error", "No se ha generado nada para imprimir.", id_))
+            continue
+        if pl.get("un_archivo") and pl.get("hoja_mm"):
+            avisos += _revisar_hojas(pl, jug, hechos, id_)
             continue
         if pl.get("jugadores_por_hoja", 1) == 1 and len(pl.get("huecos", [])) == 1:
             nombres = {os.path.splitext(os.path.basename(s))[0] for s in hechos}

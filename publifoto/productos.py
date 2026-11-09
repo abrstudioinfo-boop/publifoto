@@ -287,6 +287,70 @@ def guardar_raster(im, ruta_sin_ext, formato, ppp=300):
     raise ValueError(formato)
 
 
+class ImpresionHojas:
+    """Calendarios para imprimir de una vez en hojas de imprenta (SRA3): un solo TIFF CMYK
+    con una página por persona y un PDF CMYK con las copias de cada una (2 de cada
+    jugador, 1 de cada entrenador...). Cada calendario va centrado en su hoja. Las páginas
+    se escriben según llegan: no hace falta tenerlas todas en memoria."""
+
+    def __init__(self, ruta_sin_ext, hoja_mm, ppp=300, copias=None):
+        import tifffile
+        os.makedirs(os.path.dirname(ruta_sin_ext), exist_ok=True)
+        self.ruta = ruta_sin_ext
+        self.ppp = ppp
+        self.hoja_px = [round(mm / 25.4 * ppp) for mm in hoja_mm]
+        self.hoja_pt = [mm / 25.4 * 72 for mm in hoja_mm]
+        self.copias = copias
+        self.tif = tifffile.TiffWriter(ruta_sin_ext + ".tif")
+        self.pdf = fitz.open() if copias else None
+        self.paginas = 0
+
+    def añadir(self, im, tipo="jugador"):
+        """im: el calendario (CMYK) de una persona; tipo: su tipo, para las copias del PDF."""
+        im = im if im.mode == "CMYK" else color.a_cmyk(im)
+        W, H = self.hoja_px
+        if im.width > W or im.height > H:
+            raise ValueError(f"El calendario ({im.width} x {im.height} px) no cabe en la hoja ({W} x {H} px).")
+        x, y = (W - im.width) // 2, (H - im.height) // 2
+        hoja = np.zeros((H, W, 4), np.uint8)          # CMYK 0: papel blanco
+        hoja[y:y + im.height, x:x + im.width] = np.asarray(im)
+        self.tif.write(hoja, photometric="separated", compression="zlib", resolution=(self.ppp, self.ppp),
+                       resolutionunit="INCH", extratags=[(34675, 7, None, color.icc_fogra(), True)])
+        del hoja
+        self.paginas += 1
+        n = self.copias.get(tipo, self.copias.get("jugador", 1)) if self.copias else 0
+        if not n:
+            return
+        k = 72 / self.ppp
+        r = fitz.Rect(x * k, y * k, (x + im.width) * k, (y + im.height) * k)
+        xref = 0
+        for _ in range(n):
+            pg = self.pdf.new_page(width=self.hoja_pt[0], height=self.hoja_pt[1])
+            if xref:
+                pg.insert_image(r, xref=xref)         # la misma foto: no ocupa más
+            else:
+                # CMYK sin JPEG (con JPEG CMYK hay programas que la ven en negativo)
+                pix = fitz.Pixmap(fitz.csCMYK, im.width, im.height, im.tobytes(), False)
+                xref = pg.insert_image(r, pixmap=pix, keep_proportion=False)
+                del pix
+                self._comprimir(xref)
+
+    def _comprimir(self, xref):
+        import zlib
+        self.pdf.update_stream(xref, zlib.compress(self.pdf.xref_stream_raw(xref), 6), compress=False)
+        self.pdf.xref_set_key(xref, "Filter", "/FlateDecode")
+        self.pdf.xref_set_key(xref, "DecodeParms", "null")
+
+    def cerrar(self):
+        self.tif.close()
+        salidas = [self.ruta + ".tif"]
+        if self.pdf is not None and len(self.pdf):
+            # el perfil de imprenta de los colores CMYK, como en los TIFF
+            self.pdf.save(self.ruta + ".pdf", garbage=3, deflate=True)
+            salidas.append(self.ruta + ".pdf")
+        return salidas
+
+
 class PSDPorCapas:
     """PSD por capas: se abre en Photoshop, Affinity, GIMP, Krita, Photopea...
     Las capas se pueden ir añadiendo según están listas (el calendario de pared junta a

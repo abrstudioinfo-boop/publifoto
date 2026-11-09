@@ -46,5 +46,14 @@
   "archivo": "CALENDARIO PARED {EQUIPO} - {FOTO}",
   "excluir": [
     "equipo"
-  ]
+  ],
+  "hoja_mm": [
+    320,
+    450
+  ],
+  "un_archivo": "CALENDARIOS PARED {EQUIPO}",
+  "pdf_copias": {
+    "jugador": 2,
+    "entrenador": 1
+  }
 }

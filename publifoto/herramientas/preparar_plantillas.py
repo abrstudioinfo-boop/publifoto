@@ -279,7 +279,7 @@ def imanes(origen, carpeta=None):
         "textos": [{"texto": "{EQUIPO}", "centro_x": round((x0 + x1) / 2, 2) + 3.7, "base_y": round(texto["origin"][1], 2),
                     "tam": texto["size"], "fuente": "SourceSans3-Regular.ttf", "color": [0, 0, 0, 1]}]
                   + _club_y_temporada(quitados),
-        "impresion": ["pdf", "tif"], "editable": "ai", "archivo": "IMANES {EQUIPO}",
+        "impresion": ["pdf"], "editable": "ai", "archivo": "IMANES {EQUIPO}",
         "excluir": ["entrenador", "equipo"],
     })
 
@@ -356,7 +356,7 @@ def _es_logo(capa, W, H):
 
 
 def foto_con_logo(origen, id_, nombre, color, encuadre, impresion, editable, nombre_archivo, excluir,
-                  carpeta=None):
+                  carpeta=None, **extra):
     """origen: el TIFF con capas de Photoshop (fotos de ejemplo y el escudo)."""
     carpeta = carpeta or os.path.join(DESTINO, id_)
     (W, H), modo, todas = leer_capas(origen, cargar_pixeles=False)
@@ -376,7 +376,7 @@ def foto_con_logo(origen, id_, nombre, color, encuadre, impresion, editable, nom
         "fondo_color": [255, 255, 255],
         "huecos": [{"rect": [0, 0, W, H]}], "jugadores_por_hoja": 1,
         "encuadre": encuadre, "encima": capas_encima,
-        "impresion": impresion, "editable": editable, "archivo": nombre_archivo,
+        "impresion": impresion, "editable": editable, "archivo": nombre_archivo, **extra,
         "excluir": excluir,
     })
 
@@ -402,7 +402,11 @@ def llaveros():
 PARED = dict(id_="pared", nombre="CALENDARIOS PARED", color="CMYK",
              encuadre={"margen": 0.083, "alto_rel": 4.165, "centro": 0.014, "referencia": "mixto"},
              impresion=["tif"], editable="psd", nombre_archivo="CALENDARIO PARED {EQUIPO} - {FOTO}",
-             excluir=["equipo"])
+             excluir=["equipo"],
+             # se imprimen en SRA3: un solo TIFF con todos (una página cada uno) y un PDF con
+             # 2 copias de cada jugador y 1 de cada entrenador
+             hoja_mm=[320, 450], un_archivo="CALENDARIOS PARED {EQUIPO}",
+             pdf_copias={"jugador": 2, "entrenador": 1})
 FOTO_15X20 = dict(id_="15x20", nombre="15 X 20 CON LOGO", color="RGB",
                   encuadre={"margen": 0.083, "alto_rel": 4.03, "centro": 0.016, "referencia": "mixto"},
                   impresion=["jpg"], editable="psd", nombre_archivo="{FOTO}", excluir=["entrenador", "equipo"])
