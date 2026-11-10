@@ -51,7 +51,31 @@ def cargar_plantilla(id_):
         p = json.load(f)
     p["_carpeta"] = carpeta
     _limpiar_huecos(p)
+    if id_ == "cartas" and os.path.normcase(carpeta) != os.path.normcase(os.path.join(PLANTILLAS, id_)):
+        _cartas_del_programa(p)
     return p
+
+
+def _cartas_del_programa(p):
+    """Una carta actualizada desde el programa o con el encuadre cambiado (en la carpeta
+    del usuario) puede venir sin las plantillas de los otros equipos: se añaden las que
+    vienen dentro del programa, para poder elegirlas siempre."""
+    base = os.path.join(PLANTILLAS, "cartas")
+    try:
+        with open(os.path.join(base, "plantilla.json"), encoding="utf-8") as f:
+            fabrica = json.load(f)
+    except (OSError, ValueError):
+        return
+    if list(fabrica.get("lienzo", [])) != list(p.get("lienzo", [])):
+        return                                   # otra medida de carta: no encajan
+    vs = p.setdefault("variantes", {})
+    for clave, v in fabrica.get("variantes", {}).items():
+        propia = vs.get(clave)
+        if propia and os.path.isdir(os.path.join(p["_carpeta"], *propia["carpeta"].split("/"))):
+            continue
+        ruta = os.path.join(base, *v["carpeta"].split("/"))
+        if os.path.isdir(ruta):
+            vs[clave] = dict(v, _ruta=ruta)
 
 
 def _solape(a, b):

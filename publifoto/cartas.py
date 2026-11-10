@@ -60,7 +60,7 @@ def _variante(p, clave):
     v = p.get("variantes", {}).get(clave) if clave else None
     if v is None:
         return p["_carpeta"], p.get("club", {})
-    return os.path.join(p["_carpeta"], *v["carpeta"].split("/")), v.get("club", {})
+    return v.get("_ruta") or os.path.join(p["_carpeta"], *v["carpeta"].split("/")), v.get("club", {})
 
 
 def nombre_club(p, clave=None):

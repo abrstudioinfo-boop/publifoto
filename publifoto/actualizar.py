@@ -101,9 +101,11 @@ def actualizar(id_, origen, progreso=print):
     p["encuadre"] = vieja["encuadre"]
     if id_ == "cartas" and vieja.get("variantes"):
         # los colores de los otros clubs siguen con la carta nueva
-        p["variantes"] = vieja["variantes"]
-        shutil.copytree(os.path.join(vieja["_carpeta"], "variantes"), os.path.join(nueva, "variantes"),
-                        dirs_exist_ok=True)
+        # (las que vienen con el programa se añaden solas al abrirla: no se copian)
+        p["variantes"] = {k: v for k, v in vieja["variantes"].items() if "_ruta" not in v}
+        if os.path.isdir(os.path.join(vieja["_carpeta"], "variantes")):
+            shutil.copytree(os.path.join(vieja["_carpeta"], "variantes"), os.path.join(nueva, "variantes"),
+                            dirs_exist_ok=True)
     with open(os.path.join(nueva, "plantilla.json"), "w", encoding="utf-8") as f:
         json.dump(p, f, ensure_ascii=False, indent=2)
     # se pone en uso y se prueba; si falla se vuelve a la de antes
