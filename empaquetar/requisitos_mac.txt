@@ -13,6 +13,7 @@ PyMuPDF==1.28.2
 psd-tools==1.26.0
 rembg==2.0.85
 tifffile==2026.9.20
+psdtags==2026.1.29
 pyinstaller==6.22.3
 # chip Apple
 numpy==2.5.3; platform_machine == "arm64"

@@ -423,23 +423,23 @@ def _presencia_en_archivos(trabajo, pl, hojas, sitios, salidas):
 
 
 def _revisar_hojas(pl, jug, hechos, id_):
-    """El TIFF con todos (una página CMYK de hoja de imprenta por persona) y el PDF de copias."""
-    import tifffile
+    """El TIFF por capas con todos (fondo, una capa por persona y el escudo) y el PDF de copias."""
+    from .herramientas.tiff_capas import leer_capas
     avisos = []
     tif = [s for s in hechos if s.lower().endswith(".tif")]
     pdf = [s for s in hechos if s.lower().endswith(".pdf")]
-    hoja = [round(mm / 25.4 * pl.get("ppp", 300)) for mm in pl["hoja_mm"]]
     if not tif:
         return [Aviso("", "salida", "error", "Falta el TIFF con todos los calendarios.", id_)]
-    with tifffile.TiffFile(tif[0]) as t:
-        if len(t.pages) != len(jug):
+    try:
+        tam, modo, capas = leer_capas(tif[0], cargar_pixeles=False)
+        if list(tam) != list(pl["lienzo"]) or modo != pl["color"]:
             avisos.append(Aviso(os.path.basename(tif[0]), "salida", "error",
-                                f"Tiene {len(t.pages)} páginas y son {len(jug)} personas.", id_))
-        for pg in t.pages:
-            if list(pg.shape[1::-1]) != hoja or pg.photometric.name != "SEPARATED":
-                avisos.append(Aviso(os.path.basename(tif[0]), "salida", "error",
-                                    f"Página de {pg.shape[1]} x {pg.shape[0]} px o sin CMYK.", id_))
-                break
+                                f"Tamaño {tam} o color {modo} distinto de la plantilla.", id_))
+        if len(capas) < len(jug) + 2:
+            avisos.append(Aviso(os.path.basename(tif[0]), "salida", "error",
+                                f"Tiene {len(capas)} capas y son {len(jug)} personas (más fondo y escudo).", id_))
+    except Exception as e:
+        avisos.append(Aviso(os.path.basename(tif[0]), "salida", "error", f"El TIFF no tiene capas: {e}", id_))
     copias = pl.get("pdf_copias")
     if copias:
         import pymupdf as fitz

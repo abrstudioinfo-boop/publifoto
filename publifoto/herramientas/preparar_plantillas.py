@@ -403,8 +403,8 @@ PARED = dict(id_="pared", nombre="CALENDARIOS PARED", color="CMYK",
              encuadre={"margen": 0.083, "alto_rel": 4.165, "centro": 0.014, "referencia": "mixto"},
              impresion=["tif"], editable="psd", nombre_archivo="CALENDARIO PARED {EQUIPO} - {FOTO}",
              excluir=["equipo"],
-             # se imprimen en SRA3: un solo TIFF con todos (una página cada uno) y un PDF con
-             # 2 copias de cada jugador y 1 de cada entrenador
+             # para imprimir: un solo TIFF por capas (fondo, una por persona y el escudo arriba)
+             # y un PDF en SRA3 con 2 copias de cada jugador y 1 de cada entrenador
              hoja_mm=[320, 450], un_archivo="CALENDARIOS PARED {EQUIPO}",
              pdf_copias={"jugador": 2, "entrenador": 1})
 FOTO_15X20 = dict(id_="15x20", nombre="15 X 20 CON LOGO", color="RGB",

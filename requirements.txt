@@ -12,6 +12,7 @@ onnxruntime==1.30.0; platform_system != "Darwin" or platform_machine != "x86_64"
 # se usan las últimas que hay, y numba 0.62 pide numpy < 2.4
 onnxruntime==1.23.2; platform_system == "Darwin" and platform_machine == "x86_64"
 tifffile==2026.9.20
+psdtags==2026.1.29
 mediapipe==0.10.14
 numba==0.62.1; platform_system == "Darwin" and platform_machine == "x86_64"
 llvmlite==0.45.1; platform_system == "Darwin" and platform_machine == "x86_64"

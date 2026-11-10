@@ -301,19 +301,22 @@ def _generar_producto(trabajo, id_, progreso, hilos):
 def _generar_raster(p, jug, trabajo, aj, imp, edi, progreso, hilos):
     salidas = []
     una_por_jugador = p.get("jugadores_por_hoja", 1) == 1 and len(p["huecos"]) == 1
-    # todos en un TIFF (una hoja de imprenta cada uno) y un PDF con las copias
-    hojas = None
-    if una_por_jugador and p.get("un_archivo") and p.get("hoja_mm"):
-        nombre = productos.nombre_archivo(dict(p, archivo=p["un_archivo"]), trabajo.equipo)
-        hojas = productos.ImpresionHojas(os.path.join(imp, nombre), p["hoja_mm"], p.get("ppp", 300),
-                                         p.get("pdf_copias"))
+    # calendario de pared: para imprimir, todos en un TIFF por capas (una por jugador, el
+    # escudo arriba) y un PDF con las copias en hojas de imprenta
+    hojas = tif = None
+    if una_por_jugador and p.get("un_archivo"):
+        nombre_todos = productos.nombre_archivo(dict(p, archivo=p["un_archivo"]), trabajo.equipo)
+        tif = productos.TIFFPorCapas(tuple(p["lienzo"]), p["color"])
+        if p.get("hoja_mm") and p.get("pdf_copias"):
+            hojas = productos.PDFCopias(os.path.join(imp, nombre_todos), p["hoja_mm"], p.get("ppp", 300),
+                                        p["pdf_copias"])
     if una_por_jugador:
         def uno(j):
             progreso(f"  {p['nombre']}: {j.nombre}")
             final, capas = productos.raster(p, [j], trabajo.equipo, aj, marca=trabajo.marca)
             nombre = productos.nombre_archivo(p, trabajo.equipo, foto=j.nombre)
-            hechos = [] if hojas else [productos.guardar_raster(final, os.path.join(imp, nombre), fmt)
-                                       for fmt in p["impresion"]]
+            hechos = [] if tif else [productos.guardar_raster(final, os.path.join(imp, nombre), fmt)
+                                     for fmt in p["impresion"]]
             if p["id"] != "pared":
                 hechos.append(productos.guardar_psd(capas, tuple(p["lienzo"]), p["color"], os.path.join(edi, nombre),
                                                     final))
@@ -326,10 +329,13 @@ def _generar_raster(p, jug, trabajo, aj, imp, edi, progreso, hilos):
             salidas += hechos
             if hojas is not None:
                 hojas.añadir(ultima, j.tipo)
+            for doc in (todos, tif):
+                if doc is None:
+                    continue
+                if doc is todos and not todos.psd or doc is tif and not tif.capas:
+                    doc.añadir("Fondo", *capas[0][1:])
+                doc.añadir(*capas[1])                      # la foto
             if todos is not None:
-                if not todos.psd:
-                    todos.añadir("Fondo", *capas[0][1:])
-                todos.añadir(*capas[1])                    # la foto
                 logo, final = capas[2:], ultima
         if todos is not None and len(todos.psd):
             for c in logo:
@@ -337,8 +343,12 @@ def _generar_raster(p, jug, trabajo, aj, imp, edi, progreso, hilos):
             nombre = productos.nombre_archivo(p, trabajo.equipo, foto="TODOS").replace(" - TODOS", "")
             # se ve el último jugador (la capa de arriba), como al componer las capas
             salidas.append(todos.guardar(os.path.join(edi, nombre), final))
+        if tif is not None and tif.capas:
+            for c in logo:
+                tif.añadir(*c)                             # el escudo, arriba de todo
+            salidas.append(tif.guardar(os.path.join(imp, nombre_todos), final))
         if hojas is not None:
-            salidas += hojas.cerrar()
+            salidas.append(hojas.cerrar())
     else:
         def hoja(n_hoja):
             n, jugadores = n_hoja

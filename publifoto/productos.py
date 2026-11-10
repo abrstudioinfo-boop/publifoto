@@ -287,68 +287,117 @@ def guardar_raster(im, ruta_sin_ext, formato, ppp=300):
     raise ValueError(formato)
 
 
-class ImpresionHojas:
-    """Calendarios para imprimir de una vez en hojas de imprenta (SRA3): un solo TIFF CMYK
-    con una página por persona y un PDF CMYK con las copias de cada una (2 de cada
-    jugador, 1 de cada entrenador...). Cada calendario va centrado en su hoja. Las páginas
-    se escriben según llegan: no hace falta tenerlas todas en memoria."""
+class PDFCopias:
+    """PDF CMYK para imprimir en hojas de imprenta (SRA3): cada calendario centrado en su
+    hoja, con sus copias seguidas (2 de cada jugador, 1 de cada entrenador...). La foto de
+    las copias es la misma dentro del PDF, y se comprime al añadirla."""
 
     def __init__(self, ruta_sin_ext, hoja_mm, ppp=300, copias=None):
-        import tifffile
         os.makedirs(os.path.dirname(ruta_sin_ext), exist_ok=True)
-        self.ruta = ruta_sin_ext
+        self.ruta = ruta_sin_ext + ".pdf"
         self.ppp = ppp
         self.hoja_px = [round(mm / 25.4 * ppp) for mm in hoja_mm]
         self.hoja_pt = [mm / 25.4 * 72 for mm in hoja_mm]
-        self.copias = copias
-        self.tif = tifffile.TiffWriter(ruta_sin_ext + ".tif")
-        self.pdf = fitz.open() if copias else None
-        self.paginas = 0
+        self.copias = copias or {}
+        self.pdf = fitz.open()
 
     def añadir(self, im, tipo="jugador"):
-        """im: el calendario (CMYK) de una persona; tipo: su tipo, para las copias del PDF."""
+        """im: el calendario de una persona; tipo: su tipo (jugador, entrenador...)."""
+        import zlib
         im = im if im.mode == "CMYK" else color.a_cmyk(im)
         W, H = self.hoja_px
         if im.width > W or im.height > H:
             raise ValueError(f"El calendario ({im.width} x {im.height} px) no cabe en la hoja ({W} x {H} px).")
-        x, y = (W - im.width) // 2, (H - im.height) // 2
-        hoja = np.zeros((H, W, 4), np.uint8)          # CMYK 0: papel blanco
-        hoja[y:y + im.height, x:x + im.width] = np.asarray(im)
-        self.tif.write(hoja, photometric="separated", compression="zlib", resolution=(self.ppp, self.ppp),
-                       resolutionunit="INCH", extratags=[(34675, 7, None, color.icc_fogra(), True)])
-        del hoja
-        self.paginas += 1
-        n = self.copias.get(tipo, self.copias.get("jugador", 1)) if self.copias else 0
-        if not n:
-            return
         k = 72 / self.ppp
-        r = fitz.Rect(x * k, y * k, (x + im.width) * k, (y + im.height) * k)
+        x, y = (W - im.width) / 2 * k, (H - im.height) / 2 * k
+        r = fitz.Rect(x, y, x + im.width * k, y + im.height * k)
         xref = 0
-        for _ in range(n):
+        for _ in range(self.copias.get(tipo, self.copias.get("jugador", 1))):
             pg = self.pdf.new_page(width=self.hoja_pt[0], height=self.hoja_pt[1])
             if xref:
                 pg.insert_image(r, xref=xref)         # la misma foto: no ocupa más
-            else:
-                # CMYK sin JPEG (con JPEG CMYK hay programas que la ven en negativo)
-                pix = fitz.Pixmap(fitz.csCMYK, im.width, im.height, im.tobytes(), False)
-                xref = pg.insert_image(r, pixmap=pix, keep_proportion=False)
-                del pix
-                self._comprimir(xref)
-
-    def _comprimir(self, xref):
-        import zlib
-        self.pdf.update_stream(xref, zlib.compress(self.pdf.xref_stream_raw(xref), 6), compress=False)
-        self.pdf.xref_set_key(xref, "Filter", "/FlateDecode")
-        self.pdf.xref_set_key(xref, "DecodeParms", "null")
+                continue
+            # CMYK sin JPEG (con JPEG CMYK hay programas que la ven en negativo)
+            pix = fitz.Pixmap(fitz.csCMYK, im.width, im.height, im.tobytes(), False)
+            xref = pg.insert_image(r, pixmap=pix, keep_proportion=False)
+            del pix
+            self.pdf.update_stream(xref, zlib.compress(self.pdf.xref_stream_raw(xref), 6), compress=False)
+            self.pdf.xref_set_key(xref, "Filter", "/FlateDecode")
+            self.pdf.xref_set_key(xref, "DecodeParms", "null")
 
     def cerrar(self):
-        self.tif.close()
-        salidas = [self.ruta + ".tif"]
-        if self.pdf is not None and len(self.pdf):
-            # el perfil de imprenta de los colores CMYK, como en los TIFF
-            self.pdf.save(self.ruta + ".pdf", garbage=3, deflate=True)
-            salidas.append(self.ruta + ".pdf")
-        return salidas
+        self.pdf.save(self.ruta, garbage=3, deflate=True)
+        return self.ruta
+
+
+class _CanalHecho:
+    """Canal de una capa del TIFF ya comprimido al añadir la capa (así no se guardan en
+    memoria todas las capas sin comprimir hasta el final)."""
+
+    def __new__(cls, canal, formato):
+        info, datos = canal.tobytes(formato)
+        canal.data = None
+        canal.tobytes = lambda *a, **k: (info, datos)
+        return canal
+
+
+class TIFFPorCapas:
+    """TIFF de Photoshop con capas (como la plantilla del calendario de pared): la imagen
+    compuesta y, dentro, las capas (abajo el fondo, una por jugador y arriba el escudo).
+    Lo abren Photoshop, Affinity y Krita. Misma forma de uso que PSDPorCapas."""
+
+    def __init__(self, tam, modo):
+        import psdtags as P
+        self.P = P
+        self.tam, self.modo = tam, modo
+        self.formato = P.PsdFormat.LE32BIT
+        self.capas = []
+
+    def añadir(self, nombre, im, alfa, x, y):
+        P = self.P
+        if self.modo == "CMYK":
+            if im.mode != "CMYK":
+                a = im.getchannel("A") if im.mode == "RGBA" else alfa
+                im = cmyk_de_capa(im)
+                alfa = a
+            arr = 255 - np.asarray(im)          # Photoshop guarda el CMYK de las capas invertido
+        else:
+            if im.mode == "RGBA" and alfa is None:
+                alfa = im.getchannel("A")
+            arr = np.asarray(im.convert("RGB"))
+        h, w = arr.shape[:2]
+        ids = [P.PsdChannelId.CHANNEL0, P.PsdChannelId.CHANNEL1, P.PsdChannelId.CHANNEL2,
+               P.PsdChannelId.CHANNEL3][:arr.shape[2]]
+        canales = [P.PsdChannel(P.PsdChannelId.TRANSPARENCY_MASK, P.PsdCompressionType.ZIP,
+                                np.ascontiguousarray(np.asarray(alfa, np.uint8) if alfa is not None
+                                                     else np.full((h, w), 255, np.uint8)))]
+        canales += [P.PsdChannel(c, P.PsdCompressionType.ZIP, np.ascontiguousarray(arr[:, :, i]))
+                    for i, c in enumerate(ids)]
+        self.capas.append(P.PsdLayer(
+            name=nombre.encode("latin-1", "replace").decode("latin-1")[:31],
+            rectangle=P.PsdRectangle(y, x, y + h, x + w),
+            channels=[_CanalHecho(c, self.formato) for c in canales],
+            mask=P.PsdLayerMask(), opacity=255, flags=P.PsdLayerFlag.PHOTOSHOP5,
+            info=[P.PsdString(P.PsdKey.UNICODE_LAYER_NAME, nombre)]))
+
+    def guardar(self, ruta, final):
+        """final: la imagen compuesta (la que se ve al abrirlo sin mirar las capas)."""
+        import tifffile
+        P = self.P
+        os.makedirs(os.path.dirname(ruta), exist_ok=True)
+        cmyk = self.modo == "CMYK"
+        f = final if final.mode == self.modo else (color.a_cmyk(final) if cmyk else color.cmyk_a_rgb(final))
+        fuente = P.TiffImageSourceData(
+            name="Publifoto", psdformat=self.formato,
+            layers=P.PsdLayers(key=P.PsdKey.LAYER, has_transparency=False, layers=self.capas),
+            usermask=P.PsdUserMask(colorspace=P.PsdColorSpaceType.RGB, components=(65535, 0, 0, 0),
+                                   opacity=50))
+        icc = color.icc_fogra() if cmyk else color.icc_srgb()
+        tifffile.imwrite(ruta + ".tif", np.asarray(f), byteorder="<",
+                         photometric="separated" if cmyk else "rgb", compression="adobe_deflate",
+                         resolution=(300, 300), resolutionunit="INCH", metadata=None,
+                         extratags=[fuente.tifftag(), (34675, 7, None, icc, True)])
+        return ruta + ".tif"
 
 
 class PSDPorCapas:
