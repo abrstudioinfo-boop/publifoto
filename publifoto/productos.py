@@ -38,11 +38,62 @@ def carpeta_plantillas_usuario():
     return os.path.join(carpeta_datos(), "plantillas")
 
 
-def carpeta_plantilla(id_):
+# versión de cada plantilla del programa: sube cuando cambia cómo se prepara o qué saca.
+# Una copia del usuario (actualizada o con el encuadre cambiado) hecha con una versión
+# anterior no se usa tal cual: con el encuadre cambiado se pasa a la nueva con su encuadre;
+# una actualizada con un archivo propio deja paso a la del programa hasta que se vuelva
+# a actualizar (se prepararía distinto: sombra, línea dorada, recorte...).
+REVISION = {"cartas": 3, "pared": 2, "imanes": 2}
+
+
+def _revision(carpeta):
+    try:
+        with open(os.path.join(carpeta, "plantilla.json"), encoding="utf-8") as f:
+            return json.load(f).get("revision", 0)
+    except (OSError, ValueError):
+        return -1
+
+
+def propia_anterior(id_):
+    """¿Hay una copia del usuario de una versión anterior del programa?"""
     propia = os.path.join(carpeta_plantillas_usuario(), id_)
-    if os.path.exists(os.path.join(propia, "plantilla.json")):
+    return os.path.exists(os.path.join(propia, "plantilla.json")) and _revision(propia) < REVISION.get(id_, 0)
+
+
+def _al_dia(id_, propia):
+    """La copia con solo el encuadre cambiado pasa a la plantilla del programa, con su encuadre."""
+    import shutil
+    with open(os.path.join(propia, "plantilla.json"), encoding="utf-8") as f:
+        encuadre_propio = json.load(f).get("encuadre")
+    nueva = propia + "_al_dia"
+    shutil.rmtree(nueva, ignore_errors=True)
+    shutil.copytree(os.path.join(PLANTILLAS, id_), nueva)
+    ruta = os.path.join(nueva, "plantilla.json")
+    with open(ruta, encoding="utf-8") as f:
+        p = json.load(f)
+    if encuadre_propio:
+        p["encuadre"] = encuadre_propio
+    p["revision"] = REVISION.get(id_, 0)
+    with open(ruta, "w", encoding="utf-8") as f:
+        json.dump(p, f, ensure_ascii=False, indent=2)
+    shutil.rmtree(propia)
+    os.replace(nueva, propia)
+
+
+def carpeta_plantilla(id_):
+    fabrica = os.path.join(PLANTILLAS, id_)
+    propia = os.path.join(carpeta_plantillas_usuario(), id_)
+    if not os.path.exists(os.path.join(propia, "plantilla.json")):
+        return fabrica
+    if not propia_anterior(id_):
         return propia
-    return os.path.join(PLANTILLAS, id_)
+    if os.path.exists(os.path.join(propia, "actualizada.json")):
+        return fabrica
+    try:
+        _al_dia(id_, propia)
+        return propia
+    except OSError:
+        return fabrica
 
 
 def cargar_plantilla(id_):

@@ -10,6 +10,7 @@ el ajuste de color del jugador). El nombre y el escudo del club se cambian por l
 elijan en el programa: se quitan los de la plantilla y se ponen los nuevos.
 """
 import os
+import threading
 import unicodedata
 
 import cv2
@@ -21,6 +22,8 @@ from .herramientas.preparar_carta import aplicar_lut
 
 _cache = {}
 _cache_club = {}
+_girados = {}
+_cerrojo = threading.Lock()      # MediaPipe no se puede usar desde dos hilos a la vez
 COLOR_PLANTILLA = "Amposta"   # el color con el que viene la plantilla (sin variante)
 
 
@@ -204,6 +207,17 @@ def componer(p, jugador, ajuste=None, clave=None, marca=None):
     png, med = jugador.carta
     rec = retoque.de_jugador(jugador, Image.open(png).convert("RGBA"))
     col = p.get("colocacion", carta_auto.COLOCACION)
+    # el giro de la revisión rápida (endereza al jugador en todos los productos): se gira el
+    # recorte y se vuelve a medir dónde va, como cualquier otro jugador
+    giro = productos.giro_total(jugador, p)
+    if giro:
+        from .analisis import girar
+        rec = girar(rec, giro)
+        clave_giro = (png, os.path.getmtime(png), giro)
+        with _cerrojo:
+            if clave_giro not in _girados:
+                _girados[clave_giro] = carta_auto.medir_colocacion(rec, col)
+        med = _girados[clave_giro]
     kid = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     kid.paste(carta_auto.colocar(rec, med, col, ajuste), tuple(col["caja"][:2]))
     k = np.asarray(kid, np.float32)

@@ -34,12 +34,15 @@ ORIGINAL = "La que viene con el programa"
 def propia(id_):
     """¿Hay una copia de la plantilla en la carpeta del usuario (actualizada o con el
     encuadre cambiado)?"""
-    return os.path.exists(os.path.join(productos.carpeta_plantillas_usuario(), id_, "plantilla.json"))
+    return os.path.normcase(productos.carpeta_plantilla(id_)) ==         os.path.normcase(os.path.join(productos.carpeta_plantillas_usuario(), id_))
 
 
 def info(id_):
     """Texto con la plantilla que se está usando."""
     marca = os.path.join(productos.carpeta_plantillas_usuario(), id_, "actualizada.json")
+    if not propia(id_) and os.path.exists(marca):
+        return (ORIGINAL + " (la actualizada era de una versión anterior del programa: "
+                "vuelve a actualizarla si la necesitas)")
     if os.path.exists(marca):
         with open(marca, encoding="utf-8") as f:
             d = json.load(f)
@@ -61,6 +64,7 @@ def guardar_encuadre(id_, enc):
     with open(ruta, encoding="utf-8") as f:
         p = json.load(f)
     p["encuadre"] = {k: (round(v, 4) if isinstance(v, float) else v) for k, v in enc.items()}
+    p["revision"] = productos.REVISION.get(id_, 0)
     with open(ruta, "w", encoding="utf-8") as f:
         json.dump(p, f, ensure_ascii=False, indent=2)
 
@@ -99,6 +103,7 @@ def actualizar(id_, origen, progreso=print):
         p = json.load(f)
     # el jugador sale como en la plantilla de antes (después se puede cambiar)
     p["encuadre"] = vieja["encuadre"]
+    p["revision"] = productos.REVISION.get(id_, 0)
     if id_ == "cartas" and vieja.get("variantes"):
         # los colores de los otros clubs siguen con la carta nueva
         # (las que vienen con el programa se añaden solas al abrirla: no se copian)
