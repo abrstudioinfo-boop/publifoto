@@ -165,7 +165,7 @@ def prueba_completa(salida, jugadores=7, entrenadores=1, escudo=None, club="CLUB
                   _ruta_cache(ruta)[:-5] + "_carta1.json"):
             if os.path.exists(c):   # que se analice de nuevo en cada prueba
                 os.remove(c)
-    if carta is True:   # las cartas en el color de otro club, con su nombre y su escudo
+    if carta is True:   # las cartas en la plantilla de otro equipo
         carta = next(iter(sorted(motor.productos.cargar_plantilla("cartas").get("variantes", {}))), None)
     t = motor.Trabajo(equipo="PRUEBA", carpeta_fotos=fotos, carpeta_salida=salida,
                       carpeta_recortes=recortes, escudo=escudo, club=club, carta=carta or None,
@@ -189,13 +189,6 @@ def prueba_completa(salida, jugadores=7, entrenadores=1, escudo=None, club="CLUB
         if bool(con) != (id_ in motor.PRODUCTOS_CON_ENTRENADORES) and entrenadores:
             fallos.append(f"entrenadores en {id_}: {con}")
             print(f"  MAL {pl['nombre']}: " + ("salen entrenadores" if con else "falta el entrenador"))
-    if "cartas" in t.productos:
-        from . import cartas
-        _, capas = cartas.fondo_club(motor.productos.cargar_plantilla("cartas"), t.carta, t.marca)
-        hay = [c[0] for c in capas]
-        if t.club and "Nombre del club" not in hay or t.marca["escudo"] and "Escudo" not in hay:
-            fallos.append("cartas sin el nombre o el escudo del club")
-            print("  MAL cartas: no llevan el nombre o el escudo del club elegido", hay)
     por_producto = {}
     for s in salidas:
         p = os.path.relpath(s, t.carpeta_equipo).split(os.sep)[0]

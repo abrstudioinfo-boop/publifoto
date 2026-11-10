@@ -23,8 +23,9 @@ ACTUALIZABLES = {
     "15x20": ("15 x 20 con logo", "TIFF con capas (*.tif *.tiff)",
               "El TIFF de Photoshop con capas: foto de ejemplo y la capa del escudo."),
     "cartas": ("Cartas", "TIFF con capas (*.tif *.tiff)",
-               "El TIFF de Photoshop de la carta con los colores del equipo, con sus capas y un jugador "
-               "de ejemplo en «Place Your Image Here». Es un archivo grande: tarda un par de minutos."),
+               "El TIFF de Photoshop de la carta del equipo, con sus capas: la carta por detrás, un jugador "
+               "de ejemplo en «Place Your Image Here» y, encima, la capa que corta al jugador y los textos. "
+               "Es un archivo grande: tarda un par de minutos."),
 }
 
 

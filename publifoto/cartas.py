@@ -4,10 +4,11 @@ El recorte y la colocación son los de la sesión CARTAS (carta_auto.py): el pro
 recorta solo desde la foto arreglada, o usa el PNG del cliente si sube RECORTADAS. Ver
 herramientas/preparar_carta.py para cómo se prepara la plantilla.
 
-Colores de carta: la plantilla trae el diseño en el color de un club y, en «variantes»,
-el mismo diseño en los colores de otros clubs (solo cambian el fondo, la línea dorada y
-el ajuste de color del jugador). El nombre y el escudo del club se cambian por los que se
-elijan en el programa: se quitan los de la plantilla y se ponen los nuevos.
+Plantillas de carta: la plantilla trae la carta de un equipo (Amposta) y, en «variantes»,
+las de los otros equipos. Desde 2026 (formato «capas», ver herramientas/preparar_carta_capas.py)
+cada plantilla ya lleva el escudo y el nombre de su equipo y no se cambian: el jugador va
+entre la carta de detrás y las capas de encima (la que lo corta en la línea dorada y los
+textos), con su sombra.
 """
 import os
 import threading
@@ -19,6 +20,7 @@ from PIL import Image
 
 from . import color, productos
 from .herramientas.preparar_carta import aplicar_lut
+from .herramientas.preparar_carta_capas import _sombra
 
 _cache = {}
 _cache_club = {}
@@ -104,117 +106,65 @@ def _plantilla_px(p, clave=None):
             fondo=np.asarray(Image.open(os.path.join(c, p["fondo"])).convert("RGB"), np.float32),
             mascara=np.asarray(Image.open(os.path.join(base, p["mascara"])), np.float32) / 255,
             encima=np.asarray(Image.open(os.path.join(c, p["encima"])), np.float32),
-            lut=np.load(os.path.join(c, p["lut"])),
+            lut=np.load(os.path.join(c, p["lut"])) if p.get("lut") else None,
             sombra=p["sombra"] if isinstance(p.get("sombra"), dict) else None,
         )
     return _cache[id_]
 
 
-def _letra(fuentes, alto):
-    """La primera letra que haya de 'fuentes', con mayúsculas de 'alto' px."""
-    from PIL import ImageFont
-    for nombre in fuentes:
-        try:
-            ruta = productos.ruta_fuente(nombre)
-        except FileNotFoundError:
-            continue
-        f = ImageFont.truetype(ruta, 200)
-        b = f.getbbox("H")
-        return ImageFont.truetype(ruta, max(8, round(200 * alto / (b[3] - b[1]))))
-    raise FileNotFoundError("No se encuentra la letra del nombre del club: " + ", ".join(fuentes))
-
-
-def _nombre(info, texto, W):
-    """El nombre del club como en la plantilla: misma altura de mayúsculas, centrado donde
-    el original, ensanchado como la letra del diseño y con su degradado dorado por filas.
-    Devuelve (imagen RGBA, x, y)."""
-    from PIL import ImageDraw
-    x0, y0, x1, y1 = info["caja"]
-    alto = y1 - y0
-    letra = _letra(info["fuentes"], alto)
-    # cuánto hay que ensanchar esta letra para que el nombre escrito en la plantilla ocupe lo
-    # que ocupaba (todas las plantillas de cartas traen «C.F. AMPOSTA»)
-    b = letra.getbbox(info.get("original") or "C.F. AMPOSTA", anchor="ls")
-    ancho_orig = b[2] - b[0]
-    estira = (x1 - x0) / ancho_orig if ancho_orig else 1.0
-    b = letra.getbbox(texto, anchor="ls")
-    ancho = (b[2] - b[0]) * estira
-    # nombres largos: más pequeño, sin pasarse del ancho de la franja del nombre
-    maximo = min(W - 2 * x0 + (x1 - x0), 1.32 * (x1 - x0))
-    k = min(1.0, maximo / ancho) if ancho else 1.0
-    if k < 1:
-        letra = _letra(info["fuentes"], alto * k)
-        b = letra.getbbox(texto, anchor="ls")
-    margen = 40
-    lw, lh = b[2] - b[0] + 2 * margen, b[3] - b[1] + 2 * margen
-    tinta = Image.new("L", (lw, lh), 0)
-    ImageDraw.Draw(tinta).text((margen - b[0], margen - b[1]), texto, font=letra, fill=255, anchor="ls")
-    nw = max(1, round(lw * estira))
-    tinta = tinta.resize((nw, lh), Image.LANCZOS)
-    # base de las letras en la de la plantilla (centrada en alto si es más pequeña)
-    base_y = y1 - round(alto * (1 - k) / 2)
-    alto_k = alto * k
-    x = round((x0 + x1) / 2 - nw / 2)
-    y = base_y - (margen - b[1])
-    # el degradado: cada fila de las letras con el color de la misma altura en el original
-    filas = np.asarray(info["degradado"], np.float32)
-    yy = np.arange(lh) + y
-    i = np.clip(np.round((yy - (base_y - alto_k)) / alto_k * (len(filas) - 1)), 0, len(filas) - 1).astype(int)
-    rgb = np.repeat(filas[i][:, None, :], nw, axis=1)
-    im = np.dstack([rgb, np.asarray(tinta, np.float32)]).astype(np.uint8)
-    return Image.fromarray(im, "RGBA"), x, y
-
-
 def fondo_club(p, clave=None, marca=None):
-    """La carta sin jugador con el color 'clave' y el nombre y el escudo del club de
-    'marca' ({escudo, club}). Devuelve (fondo HxWx3 float, capas para el PSD: Fondo y,
-    si se cambian, Escudo y Nombre del club)."""
+    """La carta sin jugador de la plantilla 'clave' (None: la de Amposta). Devuelve (carta
+    HxWx3 float, capas para el PSD). El escudo y el nombre son los de la plantilla de cada
+    equipo: no se cambian ('marca' no se usa en las cartas)."""
     t = _plantilla_px(p, clave)
-    carpeta, info = _variante(p, clave)
-    marca = marca or {}
-    texto = (marca.get("club") or info.get("texto") or "").strip()
-    escudo = marca.get("escudo")
-    # en el color de la plantilla, su nombre y su escudo se quedan tal cual (los originales)
-    cambia_nombre = bool(info.get("nombre")) and (clave is not None or _simple(texto) != _simple(info.get("texto")))
-    cambia_escudo = bool(info.get("escudo")) and (clave is not None or bool(escudo))
-    if not (cambia_nombre or cambia_escudo):
-        return t["fondo"], [("Fondo", Image.fromarray(np.clip(t["fondo"] + .5, 0, 255).astype(np.uint8)), None, 0, 0)]
-    id_ = (carpeta, os.path.getmtime(os.path.join(carpeta, p["fondo"])), texto if cambia_nombre else None,
-           (escudo, os.path.getmtime(escudo)) if cambia_escudo and escudo else None)
-    if id_ in _cache_club:
-        return _cache_club[id_]
+    fondo = Image.fromarray(np.clip(t["fondo"] + .5, 0, 255).astype(np.uint8))
+    if p.get("formato") != "capas":
+        return t["fondo"], [("Fondo", fondo, None, 0, 0)]
+    # formato «capas»: la carta de detrás con las capas de encima (corte y textos)
+    c, _ = _variante(p, clave)
+    id_ = (c, os.path.getmtime(os.path.join(c, p["fondo"])), os.path.getmtime(os.path.join(c, p["encima"])))
+    if id_ not in _cache_club:
+        e = t["encima"]
+        ea = e[:, :, 3:4] / 255
+        if len(_cache_club) > 1:
+            _cache_club.clear()
+        _cache_club[id_] = (e[:, :, :3] * ea + t["fondo"] * (1 - ea), [("Fondo", fondo, None, 0, 0)])
+    return _cache_club[id_]
+
+
+def _componer_capas(p, clave, t, jugador, k, alfa):
+    """Formato «capas»: la carta de detrás, la sombra y el jugador (solo donde deja ver la
+    máscara) y encima las capas que lo cortan y los textos, como en Photoshop."""
     W, H = p["lienzo"]
-    limpio = t["fondo"].copy()
-    extra = []
-    for parte, cambia in (("escudo", cambia_escudo), ("nombre", cambia_nombre)):
-        if not cambia:
-            continue
-        v = info[parte]["vacio"]
-        hueco = np.asarray(Image.open(os.path.join(carpeta, v["archivo"])).convert("RGB"), np.float32)
-        limpio[v["y"]:v["y"] + hueco.shape[0], v["x"]:v["x"] + hueco.shape[1]] = hueco
-    if cambia_escudo and escudo:
-        from .club import ajustado
-        x0, y0, x1, y1 = info["escudo"]["caja"]
-        extra.append(("Escudo", ajustado(escudo, (x1 - x0, y1 - y0)), x0, y0))
-    if cambia_nombre and texto:
-        im, x, y = _nombre(dict(info["nombre"], fuentes=info.get("fuentes", ["BebasNeue-Regular.ttf"])), texto, W)
-        extra.append(("Nombre del club", im, x, y))
-    fondo = limpio.copy()
-    for _, im, x, y in extra:
-        a = np.asarray(im, np.float32)
-        h, w = a.shape[:2]
-        xa, ya, xb, yb = max(0, x), max(0, y), min(W, x + w), min(H, y + h)
-        if xb <= xa or yb <= ya:
-            continue
-        a = a[ya - y:yb - y, xa - x:xb - x]
-        al = a[:, :, 3:4] / 255
-        fondo[ya:yb, xa:xb] = a[:, :, :3] * al + fondo[ya:yb, xa:xb] * (1 - al)
-    capas = [("Fondo", Image.fromarray(np.clip(limpio + .5, 0, 255).astype(np.uint8)), None, 0, 0)]
-    capas += [(n, im, None, x, y) for n, im, x, y in extra]
-    if len(_cache_club) > 2:
-        _cache_club.clear()
-    _cache_club[id_] = (fondo, capas)
-    return fondo, capas
+    completa, capas = fondo_club(p, clave)
+    capas = list(capas)
+    carta = completa.copy()
+    ys, xs = np.nonzero(alfa > 0.002)
+    if len(ys):
+        s = t["sombra"]
+        m = int(s["crece"] + 3 * s["difumina"] + abs(s.get("dy", 0)) + abs(s.get("dx", 0))) if s else 4
+        y0, y1 = max(0, ys.min() - m), min(H, ys.max() + 1 + m)
+        x0, x1 = max(0, xs.min() - m), min(W, xs.max() + 1 + m)
+        sl = (slice(y0, y1), slice(x0, x1))
+        a = alfa[sl]
+        jug = k[sl][:, :, :3] if t["lut"] is None else aplicar_lut(k[sl][:, :, :3], t["lut"])
+        z = t["fondo"][sl]
+        if s:
+            f = _sombra(a, s)
+            z = z * f[..., None]
+            # negro con esta opacidad = oscurecer lo de detrás como la sombra de Photoshop
+            capas.append(("Sombra", Image.fromarray(np.dstack([np.zeros(a.shape + (3,), np.uint8),
+                                                               np.clip((1 - f) * 255 + .5, 0, 255).astype(np.uint8)]),
+                                                    "RGBA"), None, int(x0), int(y0)))
+        z = jug * a[..., None] + z * (1 - a[..., None])
+        e = t["encima"][sl]
+        ea = e[:, :, 3:4] / 255
+        carta[sl] = e[:, :, :3] * ea + z * (1 - ea)
+        capas.append((jugador.nombre, Image.fromarray(np.clip(np.dstack([jug, a * 255]) + .5, 0, 255).astype(np.uint8),
+                                                      "RGBA"), None, int(x0), int(y0)))
+    capas.append(("Corte y textos", Image.fromarray(np.clip(t["encima"] + .5, 0, 255).astype(np.uint8), "RGBA"),
+                  None, 0, 0))
+    return Image.fromarray(np.clip(carta + .5, 0, 255).astype(np.uint8)), capas
 
 
 def componer(p, jugador, ajuste=None, clave=None, marca=None):
@@ -243,6 +193,8 @@ def componer(p, jugador, ajuste=None, clave=None, marca=None):
     kid.paste(carta_auto.colocar(rec, med, col, ajuste), tuple(col["caja"][:2]))
     k = np.asarray(kid, np.float32)
     alfa = k[:, :, 3] / 255 * t["mascara"]
+    if p.get("formato") == "capas":
+        return _componer_capas(p, clave, t, jugador, k, alfa)
     zona = alfa > 0.002
     ys, xs = np.nonzero(zona)
     carta = fondo.copy()
@@ -253,7 +205,7 @@ def componer(p, jugador, ajuste=None, clave=None, marca=None):
         y0, y1 = max(0, ys.min() - m), min(H, ys.max() + 1 + m)
         x0, x1 = max(0, xs.min() - m), min(W, xs.max() + 1 + m)
         sl = (slice(y0, y1), slice(x0, x1))
-        jug = aplicar_lut(k[sl][:, :, :3], t["lut"])
+        jug = k[sl][:, :, :3] if t["lut"] is None else aplicar_lut(k[sl][:, :, :3], t["lut"])
         a = alfa[sl][..., None]
         # detrás del jugador, la carta entera (adornos, textos y escudo van debajo de él:
         # el jugador no lo tapa nada salvo la línea dorada que lo corta)
@@ -303,20 +255,43 @@ def generar(p, jugadores, equipo, ajustes, imp, edi, progreso=print, hilos=None,
         progreso(f"  CARTAS: el color «{clave}» ya no está en la plantilla, se usa el de la plantilla")
         clave = None
     fondo_club(p, clave, marca)          # una vez, antes de repartir a los jugadores en hilos
+    # para imprimir, como el calendario de pared: un TIFF por capas con todas (una capa por
+    # carta, se ve la última) y un PDF con una carta en cada página (la hoja es la carta)
+    tif = hojas = None
+    if p.get("un_archivo"):
+        nombre_todos = productos.nombre_archivo(dict(p, archivo=p["un_archivo"]), equipo)
+        ppp = p.get("ppp", 300)
+        tif = productos.TIFFPorCapas(tuple(p["lienzo"]), "CMYK")
+        hojas = productos.PDFCopias(os.path.join(imp, nombre_todos),
+                                    p.get("hoja_mm") or [v / ppp * 25.4 for v in p["lienzo"]], ppp,
+                                    p.get("pdf_copias") or {"jugador": 1})
 
     def una(j):
         if not getattr(j, "carta", None):
             progreso(f"  CARTAS: no se ha podido recortar a {j.nombre}, se salta")
-            return []
+            return [], None
         progreso(f"  CARTAS: {j.nombre}")
-        return _una(p, j, equipo, ajustes, imp, edi, clave, marca)
+        return _una(p, j, equipo, ajustes, imp, edi, clave, marca, suelta=tif is None)
     hechas = hilos.map(una, jugadores) if hilos else map(una, jugadores)
-    return [s for h in hechas for s in h]
+    salidas, ultima = [], None
+    for j, (hechos, carta_cmyk) in zip(jugadores, hechas):     # en el orden de los jugadores
+        salidas += hechos
+        if tif is not None and carta_cmyk is not None:
+            tif.añadir(j.nombre, carta_cmyk, None, 0, 0)
+            hojas.añadir(carta_cmyk, j.tipo)
+            ultima = carta_cmyk
+    if tif is not None and tif.capas:
+        salidas.append(tif.guardar(os.path.join(imp, nombre_todos), ultima))
+        salidas.append(hojas.cerrar())
+    return salidas
 
 
-def _una(p, j, equipo, ajustes, imp, edi, clave=None, marca=None):
+def _una(p, j, equipo, ajustes, imp, edi, clave=None, marca=None, suelta=True):
+    """La carta de un jugador: su PSD editable (y su TIFF suelto si no van todas en uno).
+    Devuelve (archivos hechos, la carta en CMYK)."""
     carta, capas = componer(p, j, ajustes.get(j.id), clave, marca)
     nombre = productos.nombre_archivo(p, equipo, foto=j.nombre)
     carta_cmyk = color.a_cmyk(carta)
-    return [productos.guardar_raster(carta_cmyk, os.path.join(imp, nombre), "tif"),
-            productos.guardar_psd(capas, tuple(p["lienzo"]), "CMYK", os.path.join(edi, nombre), carta_cmyk)]
+    hechos = [productos.guardar_raster(carta_cmyk, os.path.join(imp, nombre), "tif")] if suelta else []
+    hechos.append(productos.guardar_psd(capas, tuple(p["lienzo"]), "CMYK", os.path.join(edi, nombre), carta_cmyk))
+    return hechos, carta_cmyk

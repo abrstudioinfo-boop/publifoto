@@ -43,7 +43,7 @@ def carpeta_plantillas_usuario():
 # anterior no se usa tal cual: con el encuadre cambiado se pasa a la nueva con su encuadre;
 # una actualizada con un archivo propio deja paso a la del programa hasta que se vuelva
 # a actualizar (se prepararía distinto: sombra, línea dorada, recorte...).
-REVISION = {"cartas": 3, "pared": 2, "imanes": 2}
+REVISION = {"cartas": 4, "pared": 2, "imanes": 2}
 
 
 def _revision(carpeta):
@@ -102,6 +102,12 @@ def cargar_plantilla(id_):
         p = json.load(f)
     p["_carpeta"] = carpeta
     _limpiar_huecos(p)
+    if id_ == "cartas":
+        # para imprimir, todas las cartas en un TIFF por capas (una por carta) y un PDF con
+        # una carta en cada página, como el calendario de pared (también en las cartas
+        # actualizadas antes de que fuera así)
+        p.setdefault("un_archivo", "CARTAS {EQUIPO}")
+        p.setdefault("pdf_copias", {"jugador": 1})
     if id_ == "cartas" and os.path.normcase(carpeta) != os.path.normcase(os.path.join(PLANTILLAS, id_)):
         _cartas_del_programa(p)
     return p

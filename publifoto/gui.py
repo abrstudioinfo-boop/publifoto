@@ -619,12 +619,12 @@ class Ventana(QMainWindow):
         v2.addLayout(f_escudo)
         self.txt_club = QLineEdit()
         self.txt_club.setPlaceholderText("C.F. AMPOSTA")
-        self.txt_club.setToolTip("Nombre del club en las cartas y en la franja de los imanes")
+        self.txt_club.setToolTip("Nombre del club en la franja de los imanes (las cartas llevan el de su plantilla)")
         self.txt_temporada = QLineEdit(club.temporada_actual())
         self.txt_temporada.setFixedWidth(76)
         self.combo_carta = SinRueda()
-        self.combo_carta.setToolTip("La plantilla de carta de cada equipo (mismo diseño, con su color, escudo "
-                                    "y nombre). Se elige sola con el escudo del club y se puede cambiar aquí.")
+        self.combo_carta.setToolTip("La plantilla de carta de cada equipo, con su color, su escudo y su nombre "
+                                    "ya puestos. Se elige sola con el escudo del club y se puede cambiar aquí.")
         self.plantilla_cartas = productos.cargar_plantilla("cartas")
         for clave, nombre in cartas.colores(self.plantilla_cartas):
             club_carta = cartas.nombre_club(self.plantilla_cartas, clave) or ("C.F. AMPOSTA" if not clave else "")
@@ -632,7 +632,7 @@ class Ventana(QMainWindow):
         f_texto = QGridLayout()
         f_texto.setHorizontalSpacing(10)
         f_texto.setVerticalSpacing(4)
-        f_texto.addWidget(rol(QLabel("Nombre del club (cartas e imanes)"), "suave"), 0, 0)
+        f_texto.addWidget(rol(QLabel("Nombre del club (imanes)"), "suave"), 0, 0)
         f_texto.addWidget(rol(QLabel("Temporada"), "suave"), 0, 1)
         f_texto.addWidget(self.txt_club, 1, 0)
         f_texto.addWidget(self.txt_temporada, 1, 1)

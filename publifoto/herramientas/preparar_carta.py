@@ -468,6 +468,7 @@ def main(ruta_tif, carpeta=None, id_="cartas", aprobada=None, club_nombre="C.F. 
         # medido en las cartas aprobadas: pelo al 14,75 % del alto de la carta
         "encuadre": {"margen": 0.1475, "alto_rel": 5.69, "centro": 0.0, "referencia": "mixto"},
         "impresion": ["tif"], "editable": "psd", "archivo": "CARTA {FOTO}",
+        "un_archivo": "CARTAS {EQUIPO}", "pdf_copias": {"jugador": 1},
         "excluir": ["entrenador", "equipo"], "necesita_recorte": True,
         # sitio del jugador (la sesión CARTAS, plantilla de 3780 x 5315), a la escala de esta
         "colocacion": _colocacion(W, H),

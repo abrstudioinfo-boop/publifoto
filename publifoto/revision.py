@@ -423,21 +423,24 @@ def _presencia_en_archivos(trabajo, pl, hojas, sitios, salidas):
 
 
 def _revisar_hojas(pl, jug, hechos, id_):
-    """El TIFF por capas con todos (fondo, una capa por persona y el escudo) y el PDF de copias."""
+    """El TIFF por capas con todos (fondo, una capa por persona y el escudo; en las cartas,
+    una capa por carta) y el PDF de copias."""
     from .herramientas.tiff_capas import leer_capas
     avisos = []
     tif = [s for s in hechos if s.lower().endswith(".tif")]
     pdf = [s for s in hechos if s.lower().endswith(".pdf")]
     if not tif:
-        return [Aviso("", "salida", "error", "Falta el TIFF con todos los calendarios.", id_)]
+        return [Aviso("", "salida", "error", "Falta el TIFF con todos.", id_)]
     try:
         tam, modo, capas = leer_capas(tif[0], cargar_pixeles=False)
         if list(tam) != list(pl["lienzo"]) or modo != pl["color"]:
             avisos.append(Aviso(os.path.basename(tif[0]), "salida", "error",
                                 f"Tamaño {tam} o color {modo} distinto de la plantilla.", id_))
-        if len(capas) < len(jug) + 2:
+        extra = 0 if pl.get("tipo") == "carta" else 2      # fondo y escudo
+        if len(capas) < len(jug) + extra:
             avisos.append(Aviso(os.path.basename(tif[0]), "salida", "error",
-                                f"Tiene {len(capas)} capas y son {len(jug)} personas (más fondo y escudo).", id_))
+                                f"Tiene {len(capas)} capas y son {len(jug)} personas"
+                                + (" (más fondo y escudo)." if extra else "."), id_))
     except Exception as e:
         avisos.append(Aviso(os.path.basename(tif[0]), "salida", "error", f"El TIFF no tiene capas: {e}", id_))
     copias = pl.get("pdf_copias")
@@ -473,7 +476,7 @@ def revisar_salida(trabajo, salidas):
         if not hechos:
             avisos.append(Aviso("", "salida", "error", "No se ha generado nada para imprimir.", id_))
             continue
-        if pl.get("un_archivo") and pl.get("hoja_mm"):
+        if pl.get("un_archivo") and (pl.get("hoja_mm") or pl.get("tipo") == "carta"):
             avisos += _revisar_hojas(pl, jug, hechos, id_)
             continue
         if pl.get("jugadores_por_hoja", 1) == 1 and len(pl.get("huecos", [])) == 1:
