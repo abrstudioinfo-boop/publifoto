@@ -40,11 +40,20 @@ def colores(p):
     return [(None, p.get("nombre_color", COLOR_PLANTILLA))] + [(k, v["nombre"]) for k, v in vs]
 
 
+# escudos de otros deportes del mismo pueblo (AMPOSTA BASQUET no es el C.F. Amposta)
+_OTRO_DEPORTE = ("basquet", "basket", "handbol", "handball", "hoquei", "hockey", "volei", "voley", "rugbi",
+                 "rugby", "patinatge", "natacio", "atletisme", "tennis")
+
+
+def _de_futbol(n):
+    return not any(d in n for d in _OTRO_DEPORTE)
+
+
 def color_para(p, nombre_escudo):
     """El color de carta que va con el escudo elegido (por su nombre), o None (el de la
     plantilla) si ninguno lo nombra."""
     n = _simple(nombre_escudo)
-    if not n:
+    if not n or not _de_futbol(n):
         return None
     for clave, v in p.get("variantes", {}).items():
         if any(_simple(b) in n for b in v.get("buscar", [])):
@@ -55,7 +64,19 @@ def color_para(p, nombre_escudo):
 def es_club_de_plantilla(p, nombre_escudo):
     """¿El escudo elegido es el del club de la plantilla (el de Amposta)?"""
     n = _simple(nombre_escudo)
-    return bool(n) and any(_simple(b) in n for b in p.get("buscar", []))
+    return bool(n) and _de_futbol(n) and any(_simple(b) in n for b in p.get("buscar", []))
+
+
+def es_del_equipo(p, nombre_escudo, clave):
+    """¿El escudo es del equipo de la plantilla 'clave' (None: la de Amposta)?"""
+    if clave:
+        return color_para(p, nombre_escudo) == clave
+    return es_club_de_plantilla(p, nombre_escudo)
+
+
+def con_plantilla(p, nombre_escudo):
+    """¿El escudo es de un equipo que tiene plantilla de carta propia?"""
+    return color_para(p, nombre_escudo) is not None or es_club_de_plantilla(p, nombre_escudo)
 
 
 def _variante(p, clave):

@@ -748,9 +748,11 @@ class Ventana(QMainWindow):
         nombre = self.combo_escudo.currentText()
         if not ruta:
             texto = ""
-        elif club.texto_guardado(nombre):
+        elif club.texto_guardado(nombre) and not (cartas.con_plantilla(self.plantilla_cartas, nombre) and
+                                                   club.texto_guardado(nombre) == nombre.upper()):
+            # (el nombre del archivo guardado sin escribirlo no vale: va el del equipo)
             texto = club.texto_guardado(nombre)
-        elif self.combo_carta.currentData() or cartas.es_club_de_plantilla(self.plantilla_cartas, nombre):
+        elif cartas.con_plantilla(self.plantilla_cartas, nombre):
             texto = cartas.nombre_club(self.plantilla_cartas, self.combo_carta.currentData() or None)
         else:
             texto = club.texto_club(nombre)
@@ -763,10 +765,11 @@ class Ventana(QMainWindow):
         if not self.combo_escudo.currentData():
             return ""
         nombre = self.combo_escudo.currentText()
-        guardado = self.ajustes_app.value("carta/" + nombre, None)
-        if guardado is not None:
-            return guardado
-        return cartas.color_para(self.plantilla_cartas, nombre) or ""
+        # el escudo de un equipo con plantilla propia lleva siempre la suya
+        if cartas.con_plantilla(self.plantilla_cartas, nombre):
+            return cartas.color_para(self.plantilla_cartas, nombre) or ""
+        # un club sin plantilla: la que se eligió la última vez para él
+        return self.ajustes_app.value("carta/" + nombre, "") or ""
 
     def _poner_carta(self, clave):
         self.combo_carta.blockSignals(True)
@@ -775,13 +778,33 @@ class Ventana(QMainWindow):
         self.txt_club.setPlaceholderText(cartas.nombre_club(self.plantilla_cartas, clave or None) or "C.F. AMPOSTA")
 
     def carta_cambiada(self):
+        """Se elige la plantilla de un equipo: su nombre pasa al nombre del club y, si el
+        escudo elegido es el de otro equipo con plantilla, se pone el de este equipo."""
+        p = self.plantilla_cartas
         clave = self.combo_carta.currentData() or None
+        nombre_equipo = cartas.nombre_club(p, clave) or "C.F. AMPOSTA"
+        actual = self.combo_escudo.currentText() if self.combo_escudo.currentData() else ""
+        if not cartas.es_del_equipo(p, actual, clave) and (not actual or cartas.con_plantilla(p, actual)):
+            # el de este equipo; si no está en la lista, ninguno (mejor sin escudo que con el de otro)
+            otro = next((i for i in range(self.combo_escudo.count()) if self.combo_escudo.itemData(i) and
+                         cartas.es_del_equipo(p, self.combo_escudo.itemText(i), clave)), None)
+            if otro is None and actual:
+                otro = next((i for i in range(self.combo_escudo.count()) if not self.combo_escudo.itemData(i)), None)
+            if otro is not None:
+                self.combo_escudo.blockSignals(True)
+                self.combo_escudo.setCurrentIndex(otro)
+                self.combo_escudo.blockSignals(False)
+                self.ajustes_app.setValue("escudo", self.combo_escudo.currentData() or "")
+                self._pintar_escudo()
+                actual = self.combo_escudo.currentText() if self.combo_escudo.currentData() else ""
         if self.combo_escudo.currentData():
             self.ajustes_app.setValue("carta/" + self.combo_escudo.currentText(), clave or "")
-        # el nombre del club de antes era el de otro color: pasa al de este
-        de_colores = {cartas.nombre_club(self.plantilla_cartas, c) for c, _ in cartas.colores(self.plantilla_cartas)}
-        if self.txt_club.text().strip() in de_colores and clave:
-            self.txt_club.setText(cartas.nombre_club(self.plantilla_cartas, clave))
+        # el nombre: el del equipo de la plantilla, salvo con el escudo de un club sin plantilla
+        # propia y un nombre ya escrito para él (sus cartas con los colores de otro equipo)
+        de_plantillas = {cartas.nombre_club(p, c) or "C.F. AMPOSTA" for c, _ in cartas.colores(p)}
+        escrito = self.txt_club.text().strip()
+        if cartas.es_del_equipo(p, actual, clave) or not escrito or escrito in de_plantillas:
+            self.txt_club.setText(nombre_equipo)
         self._poner_carta(clave)
 
     def anadir_logos(self):
