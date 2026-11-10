@@ -778,33 +778,18 @@ class Ventana(QMainWindow):
         self.txt_club.setPlaceholderText(cartas.nombre_club(self.plantilla_cartas, clave or None) or "C.F. AMPOSTA")
 
     def carta_cambiada(self):
-        """Se elige la plantilla de un equipo: su nombre pasa al nombre del club y, si el
-        escudo elegido es el de otro equipo con plantilla, se pone el de este equipo."""
+        """Se elige la plantilla de un equipo: su nombre pasa al nombre del club (salvo uno
+        escrito a mano). El escudo no se toca: se puede usar cualquier escudo con cualquier
+        plantilla y escribir el nombre que se quiera."""
         p = self.plantilla_cartas
         clave = self.combo_carta.currentData() or None
-        nombre_equipo = cartas.nombre_club(p, clave) or "C.F. AMPOSTA"
-        actual = self.combo_escudo.currentText() if self.combo_escudo.currentData() else ""
-        if not cartas.es_del_equipo(p, actual, clave) and (not actual or cartas.con_plantilla(p, actual)):
-            # el de este equipo; si no está en la lista, ninguno (mejor sin escudo que con el de otro)
-            otro = next((i for i in range(self.combo_escudo.count()) if self.combo_escudo.itemData(i) and
-                         cartas.es_del_equipo(p, self.combo_escudo.itemText(i), clave)), None)
-            if otro is None and actual:
-                otro = next((i for i in range(self.combo_escudo.count()) if not self.combo_escudo.itemData(i)), None)
-            if otro is not None:
-                self.combo_escudo.blockSignals(True)
-                self.combo_escudo.setCurrentIndex(otro)
-                self.combo_escudo.blockSignals(False)
-                self.ajustes_app.setValue("escudo", self.combo_escudo.currentData() or "")
-                self._pintar_escudo()
-                actual = self.combo_escudo.currentText() if self.combo_escudo.currentData() else ""
         if self.combo_escudo.currentData():
             self.ajustes_app.setValue("carta/" + self.combo_escudo.currentText(), clave or "")
-        # el nombre: el del equipo de la plantilla, salvo con el escudo de un club sin plantilla
-        # propia y un nombre ya escrito para él (sus cartas con los colores de otro equipo)
         de_plantillas = {cartas.nombre_club(p, c) or "C.F. AMPOSTA" for c, _ in cartas.colores(p)}
+        escudo = self.combo_escudo.currentText() if self.combo_escudo.currentData() else ""
         escrito = self.txt_club.text().strip()
-        if cartas.es_del_equipo(p, actual, clave) or not escrito or escrito in de_plantillas:
-            self.txt_club.setText(nombre_equipo)
+        if not escrito or escrito in de_plantillas or escrito == club.texto_club(escudo):
+            self.txt_club.setText(cartas.nombre_club(p, clave) or "C.F. AMPOSTA")
         self._poner_carta(clave)
 
     def anadir_logos(self):
