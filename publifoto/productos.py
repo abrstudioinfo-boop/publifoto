@@ -390,7 +390,8 @@ class PDFCopias:
         if im.width > W or im.height > H:
             raise ValueError(f"El calendario ({im.width} x {im.height} px) no cabe en la hoja ({W} x {H} px).")
         k = 72 / self.ppp
-        x, y = (W - im.width) / 2 * k, (H - im.height) / 2 * k
+        # centrada en puntos (no en píxeles redondeados): en SRA3 queda justa en la hoja
+        x, y = (self.hoja_pt[0] - im.width * k) / 2, (self.hoja_pt[1] - im.height * k) / 2
         r = fitz.Rect(x, y, x + im.width * k, y + im.height * k)
         xref = 0
         for _ in range(self.copias.get(tipo, self.copias.get("jugador", 1))):
@@ -434,7 +435,7 @@ class TIFFPorCapas:
         self.formato = P.PsdFormat.LE32BIT
         self.capas = []
 
-    def añadir(self, nombre, im, alfa, x, y):
+    def añadir(self, nombre, im, alfa, x, y, visible=True):
         P = self.P
         if self.modo == "CMYK":
             if im.mode != "CMYK":
@@ -460,6 +461,13 @@ class TIFFPorCapas:
             channels=[_CanalHecho(c, self.formato) for c in canales],
             mask=P.PsdLayerMask(), opacity=255, flags=P.PsdLayerFlag.PHOTOSHOP5,
             info=[P.PsdString(P.PsdKey.UNICODE_LAYER_NAME, nombre)]))
+        self.ver(len(self.capas) - 1, visible)
+
+    def ver(self, i, visible):
+        """Enciende o apaga el ojo de la capa i (en Photoshop el bit «VISIBLE» puesto la oculta)."""
+        P = self.P
+        c = self.capas[i]
+        c.flags = (c.flags & ~P.PsdLayerFlag.VISIBLE) if visible else (c.flags | P.PsdLayerFlag.VISIBLE)
 
     def guardar(self, ruta, final):
         """final: la imagen compuesta (la que se ve al abrirlo sin mirar las capas)."""

@@ -112,6 +112,21 @@ def _plantilla_px(p, clave=None):
     return _cache[id_]
 
 
+SRA3_MM = (320, 450)
+
+
+def hoja_mm(p):
+    """La página del PDF de las cartas: SRA3 justo (320 x 450 mm) si la carta cabe, aunque
+    en píxeles dé unas centésimas más (3780 px a 300 ppp son 320,04 mm); si no cabe, la
+    medida de la carta."""
+    if p.get("hoja_mm"):
+        return list(p["hoja_mm"])
+    ppp = p.get("ppp", 300)
+    if all(v <= round(mm / 25.4 * ppp) for v, mm in zip(p["lienzo"], SRA3_MM)):
+        return list(SRA3_MM)
+    return [v / ppp * 25.4 for v in p["lienzo"]]
+
+
 def fondo_club(p, clave=None, marca=None):
     """La carta sin jugador de la plantilla 'clave' (None: la de Amposta). Devuelve (carta
     HxWx3 float, capas para el PSD). El escudo y el nombre son los de la plantilla de cada
@@ -255,43 +270,85 @@ def generar(p, jugadores, equipo, ajustes, imp, edi, progreso=print, hilos=None,
         progreso(f"  CARTAS: el color «{clave}» ya no está en la plantilla, se usa el de la plantilla")
         clave = None
     fondo_club(p, clave, marca)          # una vez, antes de repartir a los jugadores en hilos
-    # para imprimir, como el calendario de pared: un TIFF por capas con todas (una capa por
-    # carta, se ve la última) y un PDF con una carta en cada página (la hoja es la carta)
+    # para imprimir, como el calendario de pared: un TIFF por capas con todas y un PDF con una
+    # carta en cada página SRA3 (320 x 450 mm justos). En el TIFF, con las plantillas por capas,
+    # se pueden editar los jugadores: abajo la carta de detrás, una capa por jugador (con su
+    # sombra) y arriba el corte y los textos; se ve el último jugador y los demás tienen el ojo
+    # apagado. Con las plantillas antiguas, una capa por carta entera.
     tif = hojas = None
+    editable = p.get("formato") == "capas"
     if p.get("un_archivo"):
         nombre_todos = productos.nombre_archivo(dict(p, archivo=p["un_archivo"]), equipo)
-        ppp = p.get("ppp", 300)
         tif = productos.TIFFPorCapas(tuple(p["lienzo"]), "CMYK")
-        hojas = productos.PDFCopias(os.path.join(imp, nombre_todos),
-                                    p.get("hoja_mm") or [v / ppp * 25.4 for v in p["lienzo"]], ppp,
+        hojas = productos.PDFCopias(os.path.join(imp, nombre_todos), hoja_mm(p), p.get("ppp", 300),
                                     p.get("pdf_copias") or {"jugador": 1})
+        if editable:
+            tif.añadir(*fondo_club(p, clave)[1][0])
 
     def una(j):
         if not getattr(j, "carta", None):
             progreso(f"  CARTAS: no se ha podido recortar a {j.nombre}, se salta")
-            return [], None
+            return [], None, None
         progreso(f"  CARTAS: {j.nombre}")
         return _una(p, j, equipo, ajustes, imp, edi, clave, marca, suelta=tif is None)
     hechas = hilos.map(una, jugadores) if hilos else map(una, jugadores)
-    salidas, ultima = [], None
-    for j, (hechos, carta_cmyk) in zip(jugadores, hechas):     # en el orden de los jugadores
+    salidas, ultima, de_jugadores = [], None, []
+    for j, (hechos, carta_cmyk, capa) in zip(jugadores, hechas):     # en el orden de los jugadores
         salidas += hechos
         if tif is not None and carta_cmyk is not None:
-            tif.añadir(j.nombre, carta_cmyk, None, 0, 0)
+            if editable:
+                if capa is not None:
+                    for i in de_jugadores:
+                        tif.ver(i, False)             # se ve solo el último
+                    tif.añadir(j.nombre, *capa)
+                    de_jugadores.append(len(tif.capas) - 1)
+            else:
+                tif.añadir(j.nombre, carta_cmyk, None, 0, 0)
             hojas.añadir(carta_cmyk, j.tipo)
             ultima = carta_cmyk
-    if tif is not None and tif.capas:
+    if tif is not None and ultima is not None:
+        if editable:
+            t = _plantilla_px(p, clave)
+            tif.añadir("Corte y textos", Image.fromarray(np.clip(t["encima"] + .5, 0, 255).astype(np.uint8),
+                                                         "RGBA"), None, 0, 0)
         salidas.append(tif.guardar(os.path.join(imp, nombre_todos), ultima))
         salidas.append(hojas.cerrar())
     return salidas
 
 
+def _jugador_con_sombra(capas):
+    """Las capas de un jugador (su sombra debajo y él encima) en una sola, para que en el
+    TIFF con todos se mueva con su sombra. Devuelve (RGBA, None, x, y)."""
+    capas = [c for c in capas if c[1] is not None]
+    if not capas:
+        return None
+    x0 = min(c[3] for c in capas)
+    y0 = min(c[4] for c in capas)
+    x1 = max(c[3] + c[1].width for c in capas)
+    y1 = max(c[4] + c[1].height for c in capas)
+    rgb = np.zeros((y1 - y0, x1 - x0, 3), np.float32)
+    a = np.zeros((y1 - y0, x1 - x0), np.float32)
+    for _, im, _, x, y in capas:                      # de abajo arriba
+        c = np.asarray(im.convert("RGBA"), np.float32)
+        sl = (slice(y - y0, y - y0 + im.height), slice(x - x0, x - x0 + im.width))
+        ca = c[:, :, 3] / 255
+        ab = a[sl]
+        na = ca + ab * (1 - ca)
+        mezcla = c[:, :, :3] * ca[..., None] + rgb[sl] * (ab * (1 - ca))[..., None]
+        rgb[sl] = mezcla / np.maximum(na, 1e-6)[..., None]
+        a[sl] = na
+    im = Image.fromarray(np.clip(np.dstack([rgb, a * 255]) + .5, 0, 255).astype(np.uint8), "RGBA")
+    return im, None, int(x0), int(y0)
+
+
 def _una(p, j, equipo, ajustes, imp, edi, clave=None, marca=None, suelta=True):
     """La carta de un jugador: su PSD editable (y su TIFF suelto si no van todas en uno).
-    Devuelve (archivos hechos, la carta en CMYK)."""
+    Devuelve (archivos hechos, la carta en CMYK, su capa con la sombra para el TIFF con todos)."""
     carta, capas = componer(p, j, ajustes.get(j.id), clave, marca)
     nombre = productos.nombre_archivo(p, equipo, foto=j.nombre)
     carta_cmyk = color.a_cmyk(carta)
     hechos = [productos.guardar_raster(carta_cmyk, os.path.join(imp, nombre), "tif")] if suelta else []
     hechos.append(productos.guardar_psd(capas, tuple(p["lienzo"]), "CMYK", os.path.join(edi, nombre), carta_cmyk))
-    return hechos, carta_cmyk
+    # formato «capas»: [Fondo, Sombra, jugador, Corte y textos]; lo del medio es del jugador
+    capa = _jugador_con_sombra(capas[1:-1]) if p.get("formato") == "capas" else None
+    return hechos, carta_cmyk, capa

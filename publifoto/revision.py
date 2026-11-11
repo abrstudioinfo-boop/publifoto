@@ -454,6 +454,17 @@ def _revisar_hojas(pl, jug, hechos, id_):
                 if len(d) != esperadas:
                     avisos.append(Aviso(os.path.basename(pdf[0]), "salida", "error",
                                         f"Tiene {len(d)} páginas y tendrían que ser {esperadas}.", id_))
+                hoja = pl.get("hoja_mm")
+                if not hoja and pl.get("tipo") == "carta":
+                    from .cartas import hoja_mm
+                    hoja = hoja_mm(pl)
+                if hoja and len(d):
+                    r = d[0].rect
+                    mm = (r.width / 72 * 25.4, r.height / 72 * 25.4)
+                    if any(abs(a - b) > 0.01 for a, b in zip(mm, hoja)):
+                        avisos.append(Aviso(os.path.basename(pdf[0]), "salida", "error",
+                                            f"La hoja mide {mm[0]:.2f} x {mm[1]:.2f} mm y tendría que "
+                                            f"medir {hoja[0]:g} x {hoja[1]:g} mm.", id_))
     return avisos
 
 
